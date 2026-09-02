@@ -79,10 +79,13 @@ def size_pipe_mesh(case: HeatedPipeCase, refinement: float = 1.0) -> PipeMesh:
         first = 2.0 * y_centre / refinement
         expected_yplus = case.mesh.target_yplus / refinement
     elif turbulent:
-        # wall functions: aim for y+ ~ 40 on the base grid
+        # wall functions: aim for y+ ~ 40 on the base grid.  The first cell must sit in the log layer,
+        # so if the requested radial count cannot accommodate a cell that tall the radial count is
+        # reduced (a wall-function mesh at low Re is coarse by construction).
         y_centre = first_cell_height_for_yplus(40.0, case.reynolds, case.diameter, case.fluid.nu)
         first = 2.0 * y_centre / refinement
         expected_yplus = 40.0 / refinement
+        n_radial = max(4, min(n_radial, int(radius / first)))
     else:
         # laminar: mild wall refinement helps the wall temperature gradient
         first = 0.5 * radius / n_radial
@@ -92,6 +95,8 @@ def size_pipe_mesh(case: HeatedPipeCase, refinement: float = 1.0) -> PipeMesh:
     # cells grow away from the wall, i.e. shrink toward the wall: blockMesh grading = wall/axis = 1/g^(n-1)
     grading = 1.0 / g ** (n_radial - 1)
     actual_first = radius / n_radial if g == 1.0 else first
+    if expected_yplus is not None and first > 0:
+        expected_yplus *= actual_first / first  # uniform grids give a slightly taller first cell
 
     n_cells = n_axial * n_radial
     if n_cells > case.mesh.max_cells:

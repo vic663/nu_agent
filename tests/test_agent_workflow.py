@@ -34,7 +34,8 @@ class TestWorkflow:
         assert out["status"] == "success", out.get("error")
         assert out["attempt"] == 1
         nodes = [d["node"] for d in out["decisions"]]
-        assert nodes[:5] == ["plan", "build", "run", "monitor", "postprocess"]
+        assert nodes[:6] == ["plan", "review", "build", "run", "monitor", "postprocess"]
+        assert out["preflight"]["ok"] and not out["preflight"]["blocking"]
         assert out["validation"]["passed"]
         gci = out["verification"]["gci"]
         assert gci["Nu"]["observed_order"] == pytest.approx(2.0, abs=1e-6)
@@ -43,7 +44,8 @@ class TestWorkflow:
         report = Path(out["report_path"])
         assert report.exists()
         text = report.read_text()
-        assert "## 5. Validation" in text and "PASS" in text
+        assert "## 6. Validation" in text and "PASS" in text
+        assert "## 2. Pre-flight review" in text
         assert (report.parent / "provenance.json").exists()
         assert (report.parent / "decisions.jsonl").exists()
         assert (report.parent / "figures" / "gci.png").exists()
@@ -112,6 +114,7 @@ class TestWorkflow:
         nodes = set(g.get_graph().nodes)
         assert {
             "plan",
+            "review",
             "build",
             "approve",
             "run",
@@ -119,6 +122,7 @@ class TestWorkflow:
             "diagnose",
             "postprocess",
             "verify",
+            "model_form",
             "validate",
             "calibrate",
             "uq",

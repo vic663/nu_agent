@@ -16,13 +16,19 @@ validated templates, every result is verified (grid-convergence index, exact sol
 LLM's contribution can be measured rather than assumed.
 
 ```
- "Water at Re = 20 000 in a 20 mm pipe with 50 kW/m² wall heating — validate Nu and f."
+ "Air at Re = 20 000 through a ribbed cooling tube (e/D = 0.04, p/e = 10) — validate Nu and f against Webb."
         │
         ▼
- plan ─► build ─► run ─► monitor ─┬─► postprocess ─► verify (GCI) ─► validate ─► calibrate ─► UQ ─► critique ─► report
-                    ▲             │
-                    └── diagnose ◄┘   (bounded numerics changes, max N attempts)
+ plan ─► review ─► build ─► run ─► monitor ─┬─► postprocess ─► verify (GCI) ─► model_form ─► validate ─► calibrate ─► UQ ─► critique ─► report
+          (pre-flight       ▲               │                                  (closure ensemble:
+           verifier)        └── diagnose ◄──┘  (bounded numerics changes)       model-form vs numerical uncertainty)
 ```
+
+The architecture follows what the agent literature actually supports (see
+[`docs/agent_architecture_review.md`](docs/agent_architecture_review.md)): a deterministic **workflow**
+backbone with typed contracts, an independent **verifier** that reviews every plan before compute is spent,
+and **orchestrator–workers** fan-out where sub-tasks are independent solver runs — not a conversation
+between role-playing agents.
 
 ## What it does today (v0.1)
 
@@ -32,6 +38,8 @@ LLM's contribution can be measured rather than assumed.
 | OpenFOAM backend: axisymmetric heated pipe, laminar & RANS (k-ω SST, k-ε family), template-generated, y⁺-targeted meshing | ✅ tested on OpenFOAM v1912, targets v2312–v2512 |
 | **Rib-roughened cooling tube** (turbine-blade turbulator / AGR cladding analogue): multi-block mesh, module-averaged Nu & f, Webb–Eckert–Goldstein validation, reattachment diagnostic | ✅ real runs; SST model-form failure detected automatically |
 | Continue-from-latest-time for stalled runs, idempotent case reuse | ✅ |
+| **Pre-flight review** node: correlation validity at the operating point, y⁺ vs wall treatment, entry length, closure lessons, FESTIM time scales — blocking findings stop the run before build | ✅ rules; LLM may add findings, never remove |
+| **Closure ensemble** (`model_form`): re-runs the base grid with alternative RANS closures (optionally in parallel) and reports model-form uncertainty next to the GCI, with per-closure reattachment diagnostics | ✅ |
 | FESTIM 2.x backend: 1-D tritium permeation (with McNabb–Foster traps) and TDS | ✅ generated & post-processed; solver run in the FESTIM container |
 | Mock backend with controlled discretisation error for CI and agent evals | ✅ |
 | Live convergence monitor (stops OpenFOAM early once *physically meaningful* residuals converge) | ✅ |
@@ -42,7 +50,7 @@ LLM's contribution can be measured rather than assumed.
 | Sobol sensitivity analysis (SALib) | ✅ |
 | Markdown report with plots, decision log and provenance (git hash, versions, digests) | ✅ |
 | Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ |
-| Agent qualification suite (`nuagent eval`) | ✅ 6 tasks, 100 % success / 100 % validated on the mock backend |
+| Agent qualification suite (`nuagent eval`, `--repeats` for τ-bench **pass^k** reliability) | ✅ 7 tasks, 100 % success / 100 % validated, pass^2 = 1.0 (rules policy, mock backend) |
 | LLM planning from natural language (`nuagent ask`) — Anthropic, OpenAI, or any OpenAI-compatible local server | ✅ |
 
 ### Results so far (real OpenFOAM runs, single core)
@@ -55,13 +63,23 @@ LLM's contribution can be measured rather than assumed.
 | Turbulent pipe, Re = 20 000 | f | 0.02416 | Petukhov 0.02615 (±5 %) | −7.6 % | GCI 0.9 % |
 | **Rib-roughened tube**, air, Re = 20 000, e/D = 0.04, p/e = 10, low-Re k-ε | Nu (nominal area) | 112.9 (Nu/Nu₀ = 2.18) | Webb et al. 1971: 141.9 (±15 %) | −20.4 % (−13 % with base-temperature definition) | p = 2.1, GCI 2.5 % |
 | Rib-roughened tube | f | 0.2313 (f/f₀ = 8.85) | Webb et al. 1971: 0.2392 (±10 %) | **−3.3 %** | not asymptotic (p = 0.25; 2.4 % change between the two finest grids) |
+| **Turbulent pipe, closure ensemble** (SST y⁺≈1 · k-ε and realizable k-ε with Jayatilleke wall functions y⁺≈38 · Launder–Sharma y⁺≈1) | Nu | 124.6 / 132.3 / 130.0 / 174.2 | Gnielinski 137.8 (±10 %) | −9.6 / −4.0 / −5.7 / +26.4 % | **model-form ±19.9 % vs GCI < 0.1 %** |
+| Turbulent pipe, closure ensemble | f | 0.02416 / 0.02467 / 0.02366 / 0.03037 | Petukhov 0.02615 (±5 %) | −7.6 / −5.7 / −9.5 / +16.1 % | **model-form ±13.9 % vs GCI 0.9 %** |
 
 Energy-balance closure 0.06–0.1 % (smooth pipes) and 3 % (ribbed tube), mass-balance closure 0.13 %, friction factor from
 d*p*/d*x* and from wall shear agree within 2 %. Full reports with figures: [`docs/examples/`](docs/examples/).
 
 The turbulent Nusselt number sits inside the correlations' stated uncertainty and shows the well-known
-5–10 % under-prediction of wall-resolved SST with Pr_t = 0.85 — which is exactly the kind of model-form
-uncertainty the calibration module is designed to quantify next (roadmap week 2).
+5–10 % under-prediction of wall-resolved SST with Pr_t = 0.85. The closure ensemble puts a number on the
+model-form uncertainty that a single run hides: three closures agree with Gnielinski within its band, the
+Launder–Sharma low-Re k-ε model over-predicts both Nu and f by 16–26 % — while for the *ribbed* tube the
+same model is the one that reproduces the flow topology and k-ω SST is the outlier. Closure trust is
+case-dependent, which is why the workflow measures it instead of choosing a favourite. (The ensemble also
+exposed a set-up defect worth recording: with the plain `alphatWallFunction`, wall-function members gave
+Nu ≈ 285 — 2.2× the correlation — because that function ignores the molecular Prandtl number; the
+Jayatilleke thermal law of the wall is now used for wall-function cases and brings them to within 4 % of
+Gnielinski. The first-order wall-shear estimate likewise now includes ν_t at the wall, so f from d*p*/d*x*
+and from τ_w agree within 2 % for every member.)
 
 **The ribbed tube is where the workflow earns its keep.** With the default k-ω SST closure the run
 converges cleanly but predicts a single recirculation filling the whole inter-rib gap (d-type cavity flow),
@@ -100,8 +118,9 @@ nuagent run examples/tds_calibration/tds_reduced_calibration.yaml
 export ANTHROPIC_API_KEY=…   # or OPENAI_API_KEY / OPENAI_BASE_URL for a local vLLM/Ollama server
 nuagent ask "Turbulent water flow in a 20 mm pipe at Re=20000 with 50 kW/m2 heating; validate Nu and f" --plan-only
 
-# 6. qualify the agent: success rate, retries, validation and GCI outcomes over the task suite
-nuagent eval evals/tasks --backend mock --policy rules
+# 6. qualify the agent: success rate, retries, validation and GCI outcomes over the task suite;
+#    --repeats N adds the pass^k reliability statistic (probability that all N trials succeed)
+nuagent eval evals/tasks --backend mock --policy rules --repeats 3
 ```
 
 ## LLM options and cost
@@ -145,6 +164,16 @@ reports observed order, Richardson-extrapolated value and GCI; every QoI is comp
 solution or a correlation *with the correlation's own uncertainty band*, and the report states whether
 the numerical-uncertainty band overlaps the reference band.
 
+**Model-form uncertainty is measured, not assumed.** For separated internal flows the RANS closure is the
+dominant uncertainty (NASA CFD Vision 2030's central complaint). A `model_form` block in the spec re-runs
+the converged base grid with alternative closures; the report shows the spread as a model-form band next to
+the GCI and says which one dominates. In the ribbed tube it is model form by an order of magnitude.
+
+**Verify the plan before you pay for it.** The `review` node is a generator–verifier split: whoever wrote
+the specification (human, rules, LLM), an independent deterministic reviewer checks correlation validity
+at the operating point, wall resolution, development length and known closure pitfalls, and blocks
+impossible cases (a TDS spectrum with no traps) before a single cell is meshed.
+
 **Solver isolation.** Cases are self-contained directories with an `Allrun`; the agent never imports
 OpenFOAM or dolfinx. The same case runs on a laptop, in `opencfd/openfoam-default` /
 `dolfinx/dolfinx` containers, or under SLURM with a human approval gate — and can be re-run by hand.
@@ -161,12 +190,13 @@ src/nuagent/
   backends/festim      FESTIM 2.x runner (params.json → results.csv) and post-processing
   backends/mock        analytical "solver" with controllable failures for CI and evals
   executors/           local (with live monitor), Docker, SLURM
-  agent/               LangGraph graph, nodes, policies (rules / LLM), V&V comparison logic
+  agent/               LangGraph graph, nodes, policies (rules / LLM), pre-flight review, closure ensemble, V&V logic
   calibration/         emcee Bayesian calibration, LHS + GP surrogate
   uq/                  Saltelli sampling and Sobol indices
   reporting/           Markdown report, plots, provenance
   evals/               agent qualification harness
-examples/              ready-to-run specs (heated pipe laminar/turbulent/SLURM, permeation, TDS calibration)
+examples/              ready-to-run specs (ribbed cooling tube with closure ensemble, heated pipe laminar/turbulent/SLURM,
+                       permeation, TDS calibration)
 evals/tasks/           qualification tasks with expected outcomes
 docs/                  design, case catalogue, roadmap, publication plan, example reports
 docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
@@ -178,6 +208,8 @@ docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
 - [Case catalogue](docs/case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)
 - [Roadmap](docs/roadmap.md) — 3-week plan: coupled CFD→tritium permeation, MHD duct, ribbed channel, HPC
 - [Literature review and scientific positioning](docs/literature_review.md) — where the field is, the gap, the story
+- [Aerospace needs review](docs/aerospace_review.md) — CFD Vision 2030, AIAA G-077 / ASME V&V 20 / NASA-STD-7009 / certification by analysis, turbine cooling, anti-ice, hydrogen aircraft — and the gap NuAgent fills
+- [Agent architecture review](docs/agent_architecture_review.md) — the widely cited agentic patterns (ReAct, Reflexion, AutoGen, MetaGPT, SWE-agent, Agentless, MAST, τ-bench…), why NuAgent is a workflow with a verifier and orchestrator–workers rather than a multi-agent chat
 - [Publication plan](docs/publication_plan.md) — research questions and experiment matrix
 - [Example reports](docs/examples/) — generated by the workflow from real OpenFOAM runs
 

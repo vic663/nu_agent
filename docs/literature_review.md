@@ -3,6 +3,12 @@
 *Compiled September 2026. Items marked ✔ were checked against the arXiv abstract page during the
 review; items marked (verify) are cited from memory and must be checked before any submission.*
 
+*Companion reviews: [`aerospace_review.md`](aerospace_review.md) — what aerospace thermal-fluids
+engineering (CFD Vision 2030, AIAA G-077, ASME V&V 20, NASA-STD-7009B, certification by analysis, turbine
+cooling, anti-ice, hydrogen aircraft) needs from automated V&V; [`agent_architecture_review.md`](agent_architecture_review.md)
+— the widely cited agentic patterns with verified arXiv identifiers, and why NuAgent is a verifier-gated
+workflow with orchestrator–workers fan-out rather than a multi-agent conversation.*
+
 ## 1. Where the field is
 
 ### 1.1 LLM agents that drive CFD codes (2024 – 2026)
@@ -13,7 +19,8 @@ review; items marked (verify) are cited from memory and must be checked before a
 | **MetaOpenFOAM 2.0** — arXiv:2502.00498 ✔ | Adds chain-of-thought decomposition and *iterative verification* (does the case run?) | executability 6.3/7, 86.9 % pass, ≈$0.15 per case | "Verification" here means the case executes, not that the physics is right |
 | **OpenFOAMGPT** — Pandey, Xu, Wang, Chu, arXiv:2501.06327 ✔ | RAG-augmented agent; compares GPT-4o and o1 on turbulence, BC and multiphase set-ups with iterative correction loops | Qualitative/quantitative case studies | Authors state that "human oversight remains crucial for ensuring accuracy" |
 | **Foam-Agent** — Yue et al., arXiv:2505.04997 ✔ (rev. 2026) | Multi-agent workflow covering meshing, job configuration and visualisation | 110 tasks; 88.2 % *execution* success without expert intervention | Largest CFD-agent benchmark so far; metric is execution success |
-| ChatCFD / CFD-copilot style tools (2025, verify) | Conversational case set-up assistants | small case sets | Same pattern: convenience and executability |
+| **CFDLLMBench** — Somasekharan et al., arXiv:2509.20374 ✔ | Benchmark suite (CFDQuery / CFDCodeBench / FoamBench) for LLM CFD knowledge, reasoning and implementation | task-level scores | The field is starting to benchmark — but on knowledge and executability, not on V&V |
+| Fine-tuned CFD LLM — Dong, Lu, Yang, arXiv:2504.09602 ✔ | Qwen2.5-7B fine-tuned to write OpenFOAM cases | 88.7 % solution accuracy on 21 flow cases | Small local models can do the set-up; the credibility gap is unchanged |
 
 **Common denominator:** the success metric is *did the solver run and produce output*. None of these
 systems performs solution verification (grid-convergence, error estimation), none compares against
@@ -24,10 +31,10 @@ runs a deterministic baseline against which the LLM's contribution can be measur
 
 ### 1.2 Autonomous "AI scientist" agents and how the community evaluates them
 
-- **Coscientist** (Boiko et al., *Nature* 2023) and **ChemCrow** (Bran et al., *Nat. Mach. Intell.* 2024)
-  showed LLM agents planning and executing chemistry with lab automation (verify exact citations).
-- **The AI Scientist** (Lu et al., 2024, verify) automates paper-writing research loops; criticised for
-  weak evaluation of correctness.
+- **Coscientist** (Boiko et al., *Nature* 2023, verify) and **ChemCrow** (Bran et al., arXiv:2304.05376 ✔)
+  showed LLM agents planning and executing chemistry with lab automation.
+- **The AI Scientist** (Lu et al., arXiv:2408.06292 ✔) and **Agent Laboratory** (Schmidgall et al.,
+  arXiv:2501.04227 ✔) automate research loops; both are criticised for weak evaluation of correctness.
 - **ScienceAgentBench** — Chen et al., arXiv:2410.05080 ✔: 102 expert-validated tasks from 44 papers;
   the best agent solves 32.4 % (42.2 % with o1-preview). Lesson: *rigorous, expert-validated benchmarks
   with ground truth are what moves the field*, and current agents are far from reliable.

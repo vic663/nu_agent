@@ -126,6 +126,25 @@ class MockBackend:
         )
 
 
+# Closure-dependent bias of the mock "solver" (relative to the reference correlation), so that a
+# closure ensemble has a measurable, reproducible model-form spread.  The ribbed-tube SST entry
+# mimics the behaviour observed with OpenFOAM (d-type cavity flow, no reattachment, low Nu and f;
+# see docs/case_catalogue.md D1) so the physics critique is exercised without a solver.
+CLOSURE_BIAS: dict[str, dict[str, float]] = {
+    "laminar": {"Nu": 1.0, "f": 1.0},
+    "kOmegaSST": {"Nu": 1.0, "f": 1.0},
+    "kEpsilon": {"Nu": 1.03, "f": 0.98},
+    "realizableKE": {"Nu": 0.985, "f": 1.01},
+    "LaunderSharmaKE": {"Nu": 1.015, "f": 1.005},
+}
+RIBBED_CLOSURE_BIAS: dict[str, dict[str, float]] = {
+    "kOmegaSST": {"Nu": 0.45, "f": 0.50, "reattach": float("nan"), "reversed": 0.95},
+    "kEpsilon": {"Nu": 0.90, "f": 0.97, "reattach": 4.2, "reversed": 0.42},
+    "realizableKE": {"Nu": 0.88, "f": 0.95, "reattach": 4.6, "reversed": 0.46},
+    "LaunderSharmaKE": {"Nu": 0.92, "f": 0.99, "reattach": 4.4, "reversed": 0.44},
+}
+
+
 def _mock_values(spec: SimulationSpec, h: float, meta: dict) -> dict[str, Any]:
     """Deterministic synthetic results with second-order discretisation error."""
     from nuagent.physics import analytical, correlations, reduced
@@ -136,7 +155,18 @@ def _mock_values(spec: SimulationSpec, h: float, meta: dict) -> dict[str, Any]:
         nu_ref = correlations.nusselt(case.reynolds, case.fluid.pr).value
         f_ref = correlations.friction_factor(case.reynolds).value
         extra = {}
+        checks: dict[str, Any] = {
+            "energy_balance_error": 1e-3 * (h / h0),
+            "mass_balance_error": -1e-3,
+        }
+        closure = case.turbulence_model.value
+        bias = CLOSURE_BIAS.get(closure, {"Nu": 1.0, "f": 1.0})
         if isinstance(case, RibbedTubeCase):
+            rb = RIBBED_CLOSURE_BIAS.get(closure)
+            if rb is not None:
+                bias = {"Nu": rb["Nu"], "f": rb["f"]}
+                checks["reattachment_x_over_e"] = rb["reattach"]
+                checks["reversed_flow_fraction_of_gap"] = rb["reversed"]
             webb = correlations.webb_ribbed_tube(
                 case.reynolds,
                 case.fluid.pr,
@@ -146,25 +176,25 @@ def _mock_values(spec: SimulationSpec, h: float, meta: dict) -> dict[str, Any]:
             nu0, f0 = nu_ref, f_ref
             nu_ref, f_ref = webb.nusselt, webb.friction_darcy
             extra = {
-                "Nu_over_Nu0": nu_ref / nu0,
-                "f_over_f0": f_ref / f0,
+                "Nu_over_Nu0": nu_ref * bias["Nu"] / nu0,
+                "f_over_f0": f_ref * bias["f"] / f0,
                 "thermal_performance": correlations.thermal_performance_factor(
-                    nu_ref / nu0, f_ref / f0
+                    nu_ref * bias["Nu"] / nu0, f_ref * bias["f"] / f0
                 ),
             }
         err = 0.01 * (h / h0) ** 2
         return {
             "values": {
-                "Nu": nu_ref * (1.0 + err),
-                "f": f_ref * (1.0 + 0.5 * err),
+                "Nu": nu_ref * bias["Nu"] * (1.0 + err),
+                "f": f_ref * bias["f"] * (1.0 + 0.5 * err),
                 "Re": case.reynolds,
                 "Pr": case.fluid.pr,
                 "n_cells": meta["mesh"]["n_cells"],
                 **extra,
             },
-            "checks": {"energy_balance_error": 1e-3 * (h / h0), "mass_balance_error": -1e-3},
+            "checks": checks,
             "profiles": {},
-            "notes": ["synthetic result from the mock backend"],
+            "notes": [f"synthetic result from the mock backend (closure bias for {closure})"],
         }
     if isinstance(case, PermeationCase):
         D = analytical.arrhenius(case.material.D_0, case.material.E_D, case.temperature)

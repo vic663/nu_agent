@@ -46,6 +46,12 @@ validation:
   references:
     - {quantity: Nu, source: webb, tolerance: 0.25}   # RANS is known to under-predict Nu in separated regions
     - {quantity: f, source: webb, tolerance: 0.15}
+# Model-form uncertainty: re-run the base grid with alternative closures (orchestrator-workers, no LLM).
+# Each member costs about one fine-grid run; set parallel > 1 when cores allow. Delete this block for a
+# single-closure run.
+model_form:
+  closures: [kOmegaSST, kEpsilon, realizableKE]
+  parallel: 1
 execution:
   executor: local
   n_procs: 1

@@ -144,3 +144,29 @@ def compare(
         "reference_valid": reference.get("valid", True),
         "notes": reference.get("notes", ""),
     }
+
+
+def default_references(spec: SimulationSpec) -> list[ReferenceSpec]:
+    """References used when a specification names none, so that a run is never 'unvalidated'."""
+    if spec.validation.references:
+        return list(spec.validation.references)
+    if isinstance(spec.case, RibbedTubeCase):
+        return [
+            ReferenceSpec(quantity="Nu", source="webb", tolerance=0.20),
+            ReferenceSpec(quantity="f", source="webb", tolerance=0.15),
+        ]
+    if isinstance(spec.case, HeatedPipeCase):
+        if spec.case.regime.value == "laminar":
+            return [
+                ReferenceSpec(quantity="Nu", source="laminar", tolerance=0.03),
+                ReferenceSpec(quantity="f", source="laminar", tolerance=0.03),
+            ]
+        return [
+            ReferenceSpec(quantity="Nu", source="gnielinski", tolerance=0.15),
+            ReferenceSpec(quantity="f", source="petukhov", tolerance=0.10),
+        ]
+    defaults = {"permeation": ["permeation_flux_ss", "time_lag"], "tds": ["T_peak"]}
+    return [
+        ReferenceSpec(quantity=q, source="analytical", tolerance=0.05)
+        for q in defaults.get(spec.case.kind, [])
+    ]

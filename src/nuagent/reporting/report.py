@@ -150,6 +150,8 @@ def write_report(spec: SimulationSpec, state: dict[str, Any], workdir: Path, sta
         spec_dict, qois.get("profiles", {}), validation, figdir / "profiles.png"
     )
     gci_plot = plots.plot_gci(verification, figdir / "gci.png")
+    model_form = state.get("model_form", {}) or {}
+    model_form_plot = plots.plot_model_form(model_form, figdir / "model_form.png")
 
     provenance = collect_provenance(workdir, spec_dict, state)
     (workdir / "provenance.json").write_text(json.dumps(provenance, indent=2))
@@ -164,8 +166,10 @@ def write_report(spec: SimulationSpec, state: dict[str, Any], workdir: Path, sta
                     k: state.get(k)
                     for k in (
                         "error",
+                        "preflight",
                         "qois",
                         "verification",
+                        "model_form",
                         "validation",
                         "calibration",
                         "uq",
@@ -195,6 +199,8 @@ def write_report(spec: SimulationSpec, state: dict[str, Any], workdir: Path, sta
         run=state.get("run", {}) or {},
         qois=qois,
         verification=verification,
+        model_form=model_form,
+        preflight=state.get("preflight") or {},
         validation=validation,
         calibration=state.get("calibration") or {},
         uq=state.get("uq") or {},
@@ -206,6 +212,9 @@ def write_report(spec: SimulationSpec, state: dict[str, Any], workdir: Path, sta
         residual_plot=residual_plot.relative_to(workdir).as_posix() if residual_plot else None,
         profile_plot=profile_plot.relative_to(workdir).as_posix() if profile_plot else None,
         gci_plot=gci_plot.relative_to(workdir).as_posix() if gci_plot else None,
+        model_form_plot=(
+            model_form_plot.relative_to(workdir).as_posix() if model_form_plot else None
+        ),
         workdir=str(workdir),
         fmt=fmt,
         pct=pct,

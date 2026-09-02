@@ -36,7 +36,7 @@ that loop, but a national-laboratory environment asks a harder question than "ca
 
 Each layer can be used without the ones above it: `physics` and `verification` are plain functions,
 `backends` build cases that can be run by hand, `executors` run any `Allrun`, and the agent is a thin
-orchestration on top. This is what makes the system testable (80 tests, of which 77 run in under a minute with no solver).
+orchestration on top. This is what makes the system testable (96 tests, of which 95 run in under three minutes with no solver).
 
 ## 3. The specification as contract
 
@@ -71,6 +71,7 @@ state written by deterministic nodes.
 | Node | Deterministic? | What it does |
 |---|---|---|
 | `plan` | rules: yes / LLM: no | spec → validated; or natural language → `SimulationSpec` via structured output |
+| `review` | rules: yes / LLM: adds | **independent pre-flight verifier** of the plan: correlation validity at (Re, Pr, geometry), y⁺ vs wall treatment, entry length vs evaluation region, closure lessons learned (SST on p/e = 10 ribs), FESTIM time scales (final time vs 3 L²/D, step vs time lag), blocking problems (TDS without traps); writes `preflight.json`; blocking → report |
 | `build` | yes | backend renders the case (templates + validated numbers), computes mesh sizing, hashes inputs |
 | `approve` | human | `interrupt()` before expensive/HPC runs when `require_approval` |
 | `run` | yes | executor runs `Allrun`; local executor polls the log and can stop a converged run early |
@@ -78,11 +79,23 @@ state written by deterministic nodes.
 | `diagnose` | rules: yes / LLM: no | proposes **bounded** numerics changes; decides whether to *continue* the case or rebuild; gives up when the table is exhausted or attempts run out |
 | `postprocess` | yes | QoIs from raw fields (Nu, f, ΔT, balances) or `results.csv` |
 | `verify` | yes | builds and runs coarser levels, Richardson extrapolation, GCI, exact-solution error |
-| `validate` | yes | references from correlations (with uncertainty), analytical solutions or datasets |
+| `model_form` | yes | **closure ensemble** (orchestrator–workers): re-runs the base grid with each closure in `spec.model_form.closures` (thread pool, `parallel`), reuses identical cases, reduces to spread / half-range model-form uncertainty vs GCI, deviation of every member from the reference, per-closure reattachment and y⁺ diagnostics; writes `model_form.json` |
+| `validate` | yes | references from correlations (with uncertainty), analytical solutions or datasets — primary closure only |
 | `calibrate` | yes | emcee on a reduced/surrogate/high-fidelity forward model |
 | `uq` | yes | Saltelli/Sobol on the reduced model |
-| `critique` | rules: yes / LLM: adds | physics sanity checks (balances, y⁺ vs wall treatment, GCI asymptotics); LLM may add warnings, never remove |
+| `critique` | rules: yes / LLM: adds | physics sanity checks (balances, y⁺ vs wall treatment, GCI asymptotics, closure disagreement, members without reattachment, primary outside tolerance while another closure is inside); LLM may add warnings, never remove |
 | `report` | yes | Markdown report, figures, `provenance.json`, `decisions.jsonl`, `result.json` |
+
+### Why a workflow with a verifier, not a multi-agent chat
+
+The choice is argued in `docs/agent_architecture_review.md` against the widely cited agent literature.
+In short: multi-agent LLM systems fail predominantly through weak *verification and termination* (MAST),
+fixed pipelines match autonomous agents at lower cost (Agentless), and sampling/debate only pays when a
+verifier exists (Large Language Monkeys, More Agents). Simulation has cheap, deterministic verifiers —
+residuals, balances, GCI, correlations — so the agentic patterns NuAgent adopts are exactly those that
+exploit them: a generator–verifier split (`review`, `critique`), orchestrator–workers over independent
+solver jobs (`model_form`, grid levels, sweeps), and repeated-trial reliability measurement (pass^k in the
+evals). The graph itself is a state machine so that the qualification argument can be made at all.
 
 ### Guardrails
 
@@ -152,11 +165,17 @@ high-fidelity FESTIM/OpenFOAM model through a GP surrogate trained on a Latin-hy
 ## 7. Qualification of the agent
 
 `nuagent eval` runs a task suite (`evals/tasks/*.yaml`) and scores: success, attempts used vs. expected,
-validation pass, GCI monotonicity, and — for LLM policies — how well the planned spec reproduces the
-essential physics of the reference spec. The mock backend makes failure modes reproducible (aggressive
-under-relaxation ⇒ divergence; tiny iteration budget ⇒ stall). The same suite runs against OpenFOAM in
-CI's container job. Current scoreboard (mock, rules policy): 5/5 success, 5/5 validated, mean 1.6
-attempts (two tasks are designed to need recovery).
+validation pass, GCI monotonicity, expected critique warnings (e.g. task 07 must attribute the SST member's
+low Nu to missing reattachment), and — for LLM policies — how well the planned spec reproduces the
+essential physics of the reference spec. With `--repeats k` every task is run k times in fresh directories
+and the τ-bench **pass^k** statistic (probability that all k trials succeed, unbiased estimator
+C(c,k)/C(n,k)) is reported per task and averaged; a stochastic planner that is right 80 % of the time has
+pass^5 ≈ 0.33, which is the number a qualification reviewer needs to see. The mock backend makes failure
+modes reproducible (aggressive under-relaxation ⇒ divergence; tiny iteration budget ⇒ stall; closure-
+dependent bias including a no-reattachment SST member for ribbed tubes). The same suite runs against
+OpenFOAM in CI's container job. Current scoreboard (mock, rules policy, 2 repeats): 7/7 success, 7/7
+validated, mean 1.43 attempts (two tasks are designed to need recovery), pass^1 = pass^2 = 1.0 — as expected
+for a deterministic policy; the interesting numbers are the LLM policies' (publication plan RQ1).
 
 ## 8. Extending
 

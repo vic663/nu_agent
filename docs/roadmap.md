@@ -13,6 +13,8 @@ Status legend: ✅ done · 🔄 in progress · ⏳ planned
 - ✅ Bayesian calibration (emcee, GP surrogate) and Sobol UQ
 - ✅ Markdown report, provenance, decision log; CLI; eval harness; Docker; CI
 - ✅ Rib-roughened cooling tube (aerospace / AGR-cladding physics) with model-form diagnostics; continue-from-latest-time and idempotent case reuse
+- ✅ Pre-flight `review` node (independent deterministic verifier of the plan; LLM may add findings), `model_form` closure-ensemble node (orchestrator–workers; model-form vs numerical uncertainty), pass^k reliability in the evals (`--repeats`), 7-task suite
+- ✅ Literature reviews: aerospace needs and standards (`docs/aerospace_review.md`), agentic-architecture evidence and the multi-agent verdict (`docs/agent_architecture_review.md`)
 
 ## Week 1 — harden and publish
 
@@ -21,7 +23,8 @@ Status legend: ✅ done · 🔄 in progress · ⏳ planned
 | ⏳ Push to GitHub, enable CI | green badges for unit + OpenFOAM (+ FESTIM) jobs | CI containers: `opencfd/openfoam-default:2512`, `dolfinx/dolfinx:stable` |
 | ⏳ FESTIM end-to-end in the container | A3/A4 reports; fix API details surfaced by the real run | `docker compose run festim nuagent run examples/tritium_permeation/permeation_verification.yaml` |
 | ⏳ LLM policy smoke test | `nuagent ask … --plan-only` with Claude and with a local model (Ollama/vLLM via `OPENAI_BASE_URL`) | record plan-grade scores in `evals/` |
-| ⏳ Turbulent case refinement | L/D = 60, `cells_per_diameter` 15, wall-function variant; compare SST vs k-ε | expect Nu closer to Gnielinski; document model-form spread |
+| ⏳ Turbulent case refinement | L/D = 60, `cells_per_diameter` 15, wall-function variant; run the `model_form` ensemble (SST, k-ε, realizable k-ε, Launder–Sharma) on real OpenFOAM for both the smooth and the ribbed tube | expect Nu closer to Gnielinski; report model-form band vs GCI in the README table |
+| ⏳ Real-OpenFOAM closure ensemble for the ribbed tube | `examples/aerospace/ribbed_cooling_tube.yaml` now carries `model_form`; run it (≈ 4 fine-grid runs) and replace the D1 hand-assembled table with the generated §6 of the report | parallel: 3 on a 4-core machine |
 | ✅ Rib-roughened cooling tube (D1) | multi-block axisymmetric template, Webb (1971) validation, turbulence-model comparison, reattachment diagnostic | next: sweep e/D and Re; add PI's thermography data as a second reference; LES reference case |
 | ⏳ MCP server | expose `build_case`, `run_case`, `extract_qois`, `validate` as MCP tools so any agent client (Claude Code, etc.) can drive the workflow | `nuagent mcp` (FastMCP) |
 
@@ -40,7 +43,10 @@ Status legend: ✅ done · 🔄 in progress · ⏳ planned
 
 | Item | Deliverable |
 |---|---|
-| ⏳ **Agent qualification study** | eval suite (≥ 12 tasks incl. adversarial specs) × policies (rules, Claude, GPT, open-weights local) × 5 seeds; metrics: success, retries, invalid-proposal rate, cost, plan-grade |
+| ⏳ **Agent qualification study** | eval suite (≥ 12 tasks incl. adversarial specs) × policies (rules, Claude, GPT, open-weights local) × `--repeats 5`; metrics: pass^1…pass^5, retries, invalid-proposal rate, verifier interventions (review/critique changed the outcome), cost, plan-grade |
+| ⏳ **NASA TMR verification tasks** | 2-D flat plate (Cf), bump-in-channel, backward-facing step (reattachment length) as solver-agnostic eval tasks with reference solutions — the aerospace benchmark family (`docs/aerospace_review.md` §5) |
+| ⏳ **D2 impinging jet / heated plate** | anti-ice (piccolo tube) relevance; validate stagnation Nu against Martin (1977) |
+| ⏳ Plan sampling with the verifier as selector | sample N LLM plans, rank with `preflight` findings (fewest warnings, no blocking) — the "Large Language Monkeys" coverage argument with a deterministic verifier |
 | ⏳ **B2 rod-bundle subchannel** (or D2 impinging jet) | one application case with experimental validation data |
 | ⏳ **C3 divertor monoblock** | FESTIM coupled heat + hydrogen transport, 2-D |
 | ⏳ Technical report / arXiv preprint | see `publication_plan.md` |
@@ -48,6 +54,10 @@ Status legend: ✅ done · 🔄 in progress · ⏳ planned
 
 ## Later
 
+- SU2 backend (aerospace-native open-source CFD) behind the same `SolverBackend` protocol; NASA TMR airfoil cases
+- Credibility scorecard per NASA-STD-7009B factor emitted with each report
+- Hydrogen-tank liner permeation with FESTIM (aircraft LH₂ storage): liner alloy/polymer presets, cryogenic wall temperature from CFD
+- Specialist tool-agents behind typed interfaces (retrieval of validation references with citations; campaign/DoE planner) orchestrated by the deterministic graph — see `docs/agent_architecture_review.md` §4
 - GPU: PETSc/dolfinx GPU backends for FESTIM; OpenFOAM `-parallel` with GPU linear solvers (PETSc4FOAM)
 - VertexCFD / Nek5000 backends (ORNL codes) behind the same `SolverBackend` protocol
 - Two-way coupling (temperature-dependent trapping feeding back to heat transfer) via preCICE

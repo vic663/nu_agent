@@ -451,6 +451,29 @@ class UQSpec(BaseModel):
     qois: list[str] = Field(default_factory=list)
 
 
+class ModelFormSpec(BaseModel):
+    """Closure-ensemble study: re-run the base grid with alternative turbulence closures.
+
+    The spread of the QoIs across closures is reported as *model-form* uncertainty next to the
+    numerical (GCI) uncertainty, and the physics critique uses the per-closure diagnostics (e.g.
+    reattachment) to say which closures are trustworthy for the flow at hand.
+    """
+
+    closures: list[TurbulenceModel] = Field(
+        default_factory=list,
+        description="Alternative closures to run in addition to case.turbulence_model",
+    )
+    parallel: int = Field(1, ge=1, le=16, description="Closure runs executed concurrently")
+    adapt_wall_treatment: bool = Field(
+        True,
+        description=(
+            "Give each closure its appropriate wall treatment (high-Re k-epsilon family: wall "
+            "functions at y+~40; Launder-Sharma: wall-resolved y+~1; SST keeps the primary's) instead "
+            "of forcing the primary's near-wall mesh on every member"
+        ),
+    )
+
+
 class ExecutionSpec(BaseModel):
     executor: ExecutorKind = ExecutorKind.LOCAL
     n_procs: int = Field(1, ge=1, le=4096)
@@ -479,6 +502,7 @@ class SimulationSpec(BaseModel):
     validation: ValidationSpec = Field(default_factory=ValidationSpec)
     calibration: CalibrationSpec | None = None
     uq: UQSpec | None = None
+    model_form: ModelFormSpec | None = None
     execution: ExecutionSpec = Field(default_factory=ExecutionSpec)
 
     @model_validator(mode="after")

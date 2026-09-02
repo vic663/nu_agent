@@ -1,15 +1,16 @@
 """Decision policies: what the *agent* decides, separated from what the workflow *does*.
 
-Three decisions in the workflow are judgement calls:
+Four decisions in the workflow are judgement calls:
 
 1. **plan**      — turn an engineering question into a :class:`SimulationSpec`
-2. **diagnose**  — given a failed/non-converged run, propose bounded numerics changes
-3. **critique**  — review the final results for physical plausibility
+2. **review**    — independent pre-flight check of the plan before solver time is spent
+3. **diagnose**  — given a failed/non-converged run, propose bounded numerics changes
+4. **critique**  — review the final results for physical plausibility
 
 Everything else (meshing, running, parsing, GCI, validation arithmetic) is
-deterministic code.  A :class:`RulesPolicy` implements all three decisions
-with explicit heuristics so the entire workflow is reproducible without an
-LLM; :class:`LLMPolicy` layers a language model on top *but always passes the
+deterministic code.  A :class:`RulesPolicy` implements all decisions with
+explicit heuristics so the entire workflow is reproducible without an LLM;
+:class:`LLMPolicy` layers a language model on top *but always passes the
 LLM's proposal through the same validators*, so a hallucinated parameter can
 never reach the solver.  This separation is also what makes the agent
 "qualifiable": the evals compare both policies on the same tasks.
@@ -61,10 +62,21 @@ class Critique(BaseModel):
     summary: str = ""
 
 
+class ReviewFindings(BaseModel):
+    """Additional pre-flight concerns an LLM reviewer may raise (it cannot remove rule findings)."""
+
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Specific, actionable concerns about the specification not already listed",
+    )
+
+
 class Policy(Protocol):
     name: str
 
     def plan(self, task: str, hints: dict[str, Any] | None = None) -> SimulationSpec: ...
+
+    def review(self, spec: SimulationSpec, findings: Any) -> list[str]: ...
 
     def diagnose(
         self,
@@ -176,6 +188,10 @@ def rules_critique(spec: SimulationSpec, results: dict[str, Any]) -> Critique:
             warnings.append(
                 f"numerical uncertainty (GCI) for {q} is {v['gci_fine'] * 100:.1f} % > 5 %"
             )
+    if results.get("model_form"):
+        from nuagent.agent.model_form import ensemble_warnings
+
+        warnings.extend(ensemble_warnings(spec, results["model_form"]))
     failed = [
         q
         for q, r in results.get("validation", {}).get("results", {}).items()
@@ -200,6 +216,9 @@ class RulesPolicy:
         raise ValueError(
             "RulesPolicy cannot plan from natural language; provide a spec (YAML/JSON) or use an LLM policy"
         )
+
+    def review(self, spec, findings) -> list[str]:
+        return []  # the deterministic findings are computed by nuagent.agent.preflight
 
     def diagnose(self, spec, report, log_tail, current, attempt) -> Adjustments:
         return rules_diagnose(spec, report, current, attempt)
@@ -227,7 +246,15 @@ Propose the smallest bounded change to the numerics (under-relaxation, convectio
 time steps).  Never change the physics.  Use the rule-based suggestion as a baseline and only deviate with a reason."""
 
 CRITIQUE_SYSTEM = """You are reviewing a simulation report for physical plausibility (energy/mass balance, regime,
-comparison against correlations within their uncertainty bands, mesh convergence).  Be concise and specific."""
+comparison against correlations within their uncertainty bands, mesh convergence, and — if a closure
+ensemble was run — whether model-form or numerical uncertainty dominates).  Be concise and specific."""
+
+REVIEW_SYSTEM = """You are an independent senior reviewer checking a thermal-fluids / hydrogen-transport simulation
+specification BEFORE it is run (generator-verifier separation: you did not write this plan).  List additional,
+specific concerns that the rule-based findings do not already cover: physical consistency (regime vs closure,
+wall treatment vs target y+, boundary conditions), sufficiency of the domain (entry length, number of rib pitches),
+validity of the chosen validation references, and whether the execution budget is plausible.  Return an empty
+list if you have nothing to add.  Do not repeat the rule-based findings and do not invent data."""
 
 
 class LLMPolicy:
@@ -250,6 +277,26 @@ class LLMPolicy:
         msg = task if not hints else f"{task}\n\nHints (JSON): {json.dumps(hints)}"
         spec = structured.invoke([("system", PLAN_SYSTEM), ("human", msg)])
         return SimulationSpec.model_validate(spec if isinstance(spec, dict) else spec.model_dump())
+
+    def review(self, spec, findings) -> list[str]:
+        """Add concerns to the deterministic pre-flight findings; failures fall back to none."""
+        try:
+            structured = self.model.with_structured_output(ReviewFindings)
+            known = getattr(findings, "to_dict", lambda: findings)()
+            out = structured.invoke(
+                [
+                    ("system", REVIEW_SYSTEM),
+                    (
+                        "human",
+                        f"Specification: {spec.model_dump_json()}\n"
+                        f"Rule-based findings: {json.dumps(known, default=str)}",
+                    ),
+                ]
+            )
+            out = out if isinstance(out, ReviewFindings) else ReviewFindings.model_validate(out)
+            return [f"[llm] {w}" for w in out.warnings if w.strip()]
+        except Exception:  # noqa: BLE001 - review must never break the workflow
+            return []
 
     def diagnose(self, spec, report, log_tail, current, attempt) -> Adjustments:
         baseline = self.fallback.diagnose(spec, report, log_tail, current, attempt)
@@ -276,8 +323,10 @@ class LLMPolicy:
             slim = {
                 k: v
                 for k, v in results.items()
-                if k in ("qois", "verification", "validation", "convergence")
+                if k in ("qois", "verification", "validation", "convergence", "model_form")
             }
+            if isinstance(slim.get("model_form"), dict):  # keep the prompt small: drop raw members
+                slim["model_form"] = {k: v for k, v in slim["model_form"].items() if k != "members"}
             out = structured.invoke(
                 [
                     ("system", CRITIQUE_SYSTEM),

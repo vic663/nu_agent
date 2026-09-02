@@ -18,7 +18,14 @@ boundaryField
     }
     wall
     {
+{% if resolved %}
         type            compressible::alphatWallFunction;
+{% else %}
+        // thermal law of the wall with the Jayatilleke sublayer resistance: the plain alphat wall
+        // function (alphat_w = nut_w/Prt) ignores the molecular Prandtl number and over-predicts wall
+        // heat transfer by >2x for water (Pr ~ 6) at y+ ~ 40
+        type            compressible::alphatJayatillekeWallFunction;
+{% endif %}
         Prt             {{ prt }};
         value           uniform 0;
     }

@@ -131,6 +131,64 @@ def plot_gci(verification: dict[str, Any], path: Path) -> Path | None:
     return path
 
 
+def plot_model_form(model_form: dict[str, Any], path: Path) -> Path | None:
+    """Closure ensemble: one panel per QoI, bars per closure, reference band, GCI on the primary."""
+    spread = model_form.get("spread", {}) if model_form else {}
+    members = [m for m in model_form.get("members", []) if m.get("converged")] if model_form else []
+    if not spread or len(members) < 2:
+        return None
+    quantities = list(spread)
+    fig, axes = plt.subplots(
+        1, len(quantities), figsize=(4.4 * len(quantities), 3.6), squeeze=False
+    )
+    primary = model_form.get("primary")
+    for ax, q in zip(axes[0], quantities, strict=False):
+        names = [m["closure"] for m in members if q in m.get("values", {})]
+        vals = [m["values"][q] for m in members if q in m.get("values", {})]
+        colors = ["C1" if n == primary else "C0" for n in names]
+        x = np.arange(len(names))
+        ax.bar(x, vals, color=colors)
+        s = spread[q]
+        if primary in names and s.get("gci_fine") is not None:
+            i = names.index(primary)
+            ax.errorbar(
+                i,
+                vals[i],
+                yerr=s["gci_fine"] * abs(vals[i]),
+                fmt="none",
+                ecolor="k",
+                capsize=4,
+                label=f"GCI ±{100 * s['gci_fine']:.1f} %",
+            )
+        ref = s.get("reference")
+        if ref:
+            ax.axhline(ref["value"], color="k", ls="--", lw=1, label=ref["source"])
+            band = ref.get("uncertainty") or 0.0
+            if band:
+                ax.axhspan(
+                    ref["value"] * (1 - band), ref["value"] * (1 + band), color="k", alpha=0.08
+                )
+            tol = ref.get("tolerance")
+            if tol:
+                ax.axhspan(
+                    ref["value"] * (1 - tol),
+                    ref["value"] * (1 + tol),
+                    color="C2",
+                    alpha=0.06,
+                    label=f"tolerance ±{100 * tol:.0f} %",
+                )
+        ax.set_xticks(x)
+        ax.set_xticklabels(names, rotation=20, fontsize=8)
+        ax.set_ylabel(q)
+        ax.set_title(f"{q}: model-form ±{100 * s['model_form_uncertainty']:.1f} %")
+        ax.grid(axis="y", alpha=0.3)
+        ax.legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path
+
+
 def plot_posterior(
     samples: np.ndarray, names: list[str], truths: dict[str, float] | None, path: Path
 ) -> Path:

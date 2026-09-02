@@ -10,12 +10,19 @@ answers the questions a code-qualification reviewer would ask about an agent:
 * was the grid-convergence study in the asymptotic range?
 * (LLM policies) did the plan reproduce the essential physics choices, and
   how many proposals were rejected by the validators?
+* **how reliable is it?** — with ``repeats > 1`` every task is run several
+  times and the τ-bench ``pass^k`` statistic (Yao et al. 2024, arXiv:2406.12045)
+  is reported: the probability that *all* of ``k`` independent trials succeed.
+  A stochastic planner that succeeds 80 % of the time has pass^1 = 0.8 but
+  pass^5 ≈ 0.33; an engineering workflow needs pass^k to stay flat.
 """
 
 from __future__ import annotations
 
 import json
+import statistics
 import time
+from math import comb
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +40,17 @@ def load_tasks(directory: Path) -> list[dict[str, Any]]:
         d["_file"] = f.name
         tasks.append(d)
     return tasks
+
+
+def pass_hat_k(n: int, c: int, k: int) -> float:
+    """Unbiased estimate of pass^k from ``c`` successes in ``n`` i.i.d. trials (τ-bench, eq. 1).
+
+    ``pass^k = C(c, k) / C(n, k)`` — the probability that ``k`` trials drawn without replacement
+    from the observed ones are all successes.  pass^1 is the ordinary success rate.
+    """
+    if not 1 <= k <= n:
+        raise ValueError(f"k must be between 1 and n={n}, got {k}")
+    return comb(c, k) / comb(n, k)
 
 
 def grade_plan(planned: SimulationSpec, reference: SimulationSpec) -> dict[str, Any]:
@@ -56,9 +74,17 @@ def grade_plan(planned: SimulationSpec, reference: SimulationSpec) -> dict[str, 
     return {"checks": checks, "score": sum(checks.values()) / len(checks)}
 
 
-def run_task(task: dict[str, Any], rt: Runtime, outdir: Path) -> dict[str, Any]:
+def task_success(row: dict[str, Any]) -> bool:
+    return bool(
+        row["status"] in ("success", "completed_with_issues")
+        and row["expected_ranges_ok"]
+        and row["attempts_ok"]
+    )
+
+
+def run_task(task: dict[str, Any], rt: Runtime, outdir: Path, repeat: int = 0) -> dict[str, Any]:
     ref_spec = SimulationSpec.model_validate({**task["spec"], "backend": rt.backend.name})
-    workdir = outdir / ref_spec.name
+    workdir = outdir / (ref_spec.name if repeat == 0 else f"{ref_spec.name}_rep{repeat}")
     t0 = time.time()
     plan_grade = None
     if rt.policy.name == "llm" and task.get("task"):
@@ -89,8 +115,10 @@ def run_task(task: dict[str, Any], rt: Runtime, outdir: Path) -> dict[str, Any]:
     )
     gci = result.get("verification", {}).get("gci", {})
     gci_ok = bool(gci) and all(g.get("convergence") == "monotonic" for g in gci.values())
-    return {
+    critique = result.get("critique", {}) or {}
+    row = {
         "task": task["_file"],
+        "repeat": repeat,
         "status": result.get("status"),
         "attempts": result.get("attempt", 0),
         "validated": bool(result.get("validation", {}).get("passed")),
@@ -100,38 +128,67 @@ def run_task(task: dict[str, Any], rt: Runtime, outdir: Path) -> dict[str, Any]:
         "attempts_ok": (result.get("attempt", 0) <= expect["max_attempts"])
         if expect.get("max_attempts")
         else True,
+        "preflight_warnings": len((result.get("preflight") or {}).get("warnings", [])),
+        "critique_verdict": critique.get("verdict"),
+        "expected_warning_found": (
+            any(expect["critique_warning_contains"] in w for w in critique.get("warnings", []))
+            if expect.get("critique_warning_contains")
+            else None
+        ),
         "plan_grade": plan_grade,
         "wall_time_s": wall,
         "error": result.get("error"),
         "report": result.get("report_path"),
     }
+    row["success"] = task_success(row) and row["expected_warning_found"] is not False
+    return row
 
 
-def run_suite(tasks_dir: Path, rt: Runtime, outdir: Path) -> dict[str, Any]:
+def run_suite(tasks_dir: Path, rt: Runtime, outdir: Path, repeats: int = 1) -> dict[str, Any]:
     outdir = Path(outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    rows = [run_task(t, rt, outdir) for t in load_tasks(tasks_dir)]
+    repeats = max(1, int(repeats))
+    tasks = load_tasks(tasks_dir)
+    rows = [run_task(t, rt, outdir, repeat=i) for t in tasks for i in range(repeats)]
     n = len(rows) or 1
-    success = [
-        r["status"] in ("success", "completed_with_issues")
-        and r["expected_ranges_ok"]
-        and r["attempts_ok"]
-        for r in rows
-    ]
+    per_task: list[dict[str, Any]] = []
+    for t in tasks:
+        trials = [r for r in rows if r["task"] == t["_file"]]
+        c = sum(r["success"] for r in trials)
+        attempts = [r["attempts"] for r in trials]
+        per_task.append(
+            {
+                "task": t["_file"],
+                "n_trials": len(trials),
+                "n_success": c,
+                "pass_hat_k": {k: pass_hat_k(len(trials), c, k) for k in range(1, len(trials) + 1)},
+                "mean_attempts": statistics.fmean(attempts) if attempts else None,
+                "attempts_stdev": statistics.pstdev(attempts) if len(attempts) > 1 else 0.0,
+                "validated_rate": sum(r["validated"] for r in trials) / max(1, len(trials)),
+            }
+        )
+    pass_k = {
+        k: statistics.fmean(pt["pass_hat_k"][k] for pt in per_task) if per_task else 0.0
+        for k in range(1, repeats + 1)
+    }
     scoreboard = {
         "backend": rt.backend.name,
         "policy": rt.policy.name,
-        "n_tasks": len(rows),
-        "success_rate": sum(success) / n,
+        "n_tasks": len(tasks),
+        "repeats": repeats,
+        "n_runs": len(rows),
+        "success_rate": sum(r["success"] for r in rows) / n,
         "validation_rate": sum(r["validated"] for r in rows) / n,
         "gci_rate": sum(r["gci_ok"] for r in rows) / n,
         "mean_attempts": sum(r["attempts"] for r in rows) / n,
+        "pass_hat_k": pass_k,
         "mean_plan_score": (
             sum(r["plan_grade"]["score"] for r in rows if r["plan_grade"])
             / max(1, sum(1 for r in rows if r["plan_grade"]))
         )
         if any(r["plan_grade"] for r in rows)
         else None,
+        "per_task": per_task,
         "tasks": rows,
     }
     (outdir / "scoreboard.json").write_text(json.dumps(scoreboard, indent=2, default=str))

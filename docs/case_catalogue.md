@@ -13,6 +13,7 @@ Legend: ✅ implemented · 🔧 designed, in roadmap · 💡 candidate
 |---|---|---|---|---|
 | A1 | **Laminar heated pipe** (axisymmetric, uniform q″) | OpenFOAM `buoyantSimpleFoam`, laminar | exact: Nu = 48/11, f = 64/Re; thermal entry length | ✅ Nu +0.3 %, f +0.1 % |
 | A2 | **Turbulent heated pipe** (water, Re 1e4–1e5) | OpenFOAM k-ω SST (wall-resolved or wall functions) | Gnielinski ±10 %, Petukhov, Dittus–Boelter ±25 %, Blasius/Prandtl–Kármán | ✅ Nu −9.6 % vs Gnielinski (−3.0 % vs D-B), f −7.6 % |
+| A2-MF | **Turbulent heated pipe, closure ensemble** (`model_form`: SST, k-ε and realizable k-ε with Jayatilleke wall functions, Launder–Sharma) | same case, four closures, wall treatment per closure | as A2 | ✅ Nu 124.6 / 132.3 / 130.0 / 174.2 → model-form ±19.9 % vs GCI < 0.1 %; f ±13.9 % vs GCI 0.9 %; Launder–Sharma is the outlier here (it was the best closure for D1) — see `docs/examples/turbulent_pipe/report.md` §6 |
 | A3 | **Tritium permeation, plane sheet** | FESTIM 2.x, transient diffusion | Crank series solution: J_ss = Dc₀/L, t_lag = L²/6D | ✅ generated/post-processed; solver in container |
 | A4 | **Permeation with one McNabb–Foster trap** | FESTIM | Oriani effective diffusivity (dilute limit) | ✅ |
 | A5 | **Thermal desorption spectrum, one trap** | FESTIM (implant → rest → ramp) + first-order reduced model | Redhead/Kissinger peak-temperature relation | ✅ reduced model; FESTIM runner written |
@@ -62,6 +63,16 @@ topology and the friction factor, while the remaining ≈25–30 % Nusselt defic
 RANS under-prediction of heat transfer in separated/reattaching regions (Iacovides & Raisee 1999 —
 cured there by the Yap length-scale correction, not available in OpenFOAM's `LaunderSharmaKE`).
 The critique node now flags "no reattachment between ribs" automatically and recommends the ε-family.
+
+This comparison was assembled by hand from five separate runs. It is now a workflow feature: the
+`model_form` block of the specification (see `examples/aerospace/ribbed_cooling_tube.yaml`) re-runs the
+converged base grid with the listed closures — an orchestrator–workers fan-out with a deterministic
+reduction — and the report's "Model-form uncertainty" section tabulates each closure's Nu and f against
+the primary and against Webb, the per-closure reattachment length and reversed-flow fraction, and the
+half-range spread as a model-form uncertainty next to the GCI. The pre-flight `review` node warns when
+k-ω SST is selected for p/e ≈ 10 ribs, citing this table. (The mock backend reproduces the qualitative
+pattern — an SST member without reattachment — so the eval task 07 exercises the whole chain without a
+solver; the real-OpenFOAM ensemble run is scheduled in the roadmap.)
 
 **Final 12-rib case** (`examples/aerospace/ribbed_cooling_tube.yaml`, Launder–Sharma, 37k cells, 10 cells across a rib,
 three grids at ratio 1.4): Nu = 112.9 (−20.4 % vs Webb, −13 % with the base-temperature definition; Nu/Nu₀ = 2.18;

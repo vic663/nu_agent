@@ -1,0 +1,31 @@
+task: >
+  Same rib-roughened cooling tube as task 06 (air, Re = 20000, e/D = 0.04, p/e = 10, 12 ribs), but quantify the
+  model-form uncertainty: run the base grid with k-omega SST, standard k-epsilon and realizable k-epsilon in
+  addition to the Launder-Sharma primary closure, report the spread next to the GCI band, and flag any closure
+  that predicts no reattachment between the ribs.
+spec:
+  name: eval-closure-ensemble
+  backend: mock
+  case:
+    kind: ribbed_tube
+    fluid: {name: air_300K, rho: 1.16, mu: 1.85e-5, cp: 1007.0, k: 0.0263, mol_weight: 28.96}
+    diameter: 0.02
+    reynolds: 20000
+    wall_heat_flux: 1000.0
+    turbulence_model: LaunderSharmaKE
+    rib_height_over_diameter: 0.04
+    rib_pitch_over_height: 10.0
+  verification:
+    refinement_ratio: 1.4
+  validation:
+    references:
+      - {quantity: Nu, source: webb, tolerance: 0.20}
+      - {quantity: f, source: webb, tolerance: 0.15}
+  model_form:
+    closures: [kOmegaSST, kEpsilon, realizableKE]
+    parallel: 2
+expect:
+  qoi_ranges: {Nu: [110, 175], f: [0.19, 0.29]}
+  max_attempts: 1
+  # the physics critique must attribute the SST member's low Nu/f to the missing reattachment
+  critique_warning_contains: "kOmegaSST predicts no reattachment"

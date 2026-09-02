@@ -4,15 +4,24 @@
 
 {% if spec.description %}> {{ spec.description }}
 {% endif %}
-
-## 1. Problem definition
+{% set ns = namespace(n=0) %}
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Problem definition
 
 | Parameter | Value |
 |---|---|
 {% for k, v in case_table %}| {{ k }} | {{ v }} |
 {% endfor %}
 
-## 2. Run summary
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Pre-flight review
+
+{% if preflight %}{% if not preflight.get("blocking") and not preflight.get("warnings") and not preflight.get("notes") %}No findings: references valid for the operating point, wall treatment and domain length consistent.
+{% endif %}{% for w in preflight.get("blocking", []) %}- ⛔ **blocking:** {{ w }}
+{% endfor %}{% for w in preflight.get("warnings", []) %}- ⚠ {{ w }}
+{% endfor %}{% for w in preflight.get("notes", []) %}- ℹ {{ w }}
+{% endfor %}{% else %}_Not reviewed (workflow stopped before the review node)._
+{% endif %}
+
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Run summary
 
 | Item | Value |
 |---|---|
@@ -26,7 +35,7 @@
 ![residuals]({{ residual_plot }})
 {% endif %}
 
-## 3. Quantities of interest
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Quantities of interest
 
 | QoI | Value |
 |---|---|
@@ -45,7 +54,7 @@
 ![profiles]({{ profile_plot }})
 {% endif %}
 
-## 4. Solution verification
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Solution verification
 
 {% if verification.get("exact_error") %}
 **Discretisation error against exact solutions (finest grid)**
@@ -77,8 +86,28 @@
 {% elif not verification %}
 _No verification data._
 {% endif %}
+{% if model_form and model_form.get("members") %}
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Model-form uncertainty (turbulence-closure ensemble)
 
-## 5. Validation
+Same case, numerics and core grid family, {{ model_form.members | length }} closures (primary: **{{ model_form.primary }}**); {{ model_form.n_converged }} converged. Wall treatment and near-wall resolution follow each closure's formulation.
+
+{% set rib = namespace(on=false) %}{% for c, d in model_form.get("diagnostics", {}).items() %}{% if d.get("reversed_flow_fraction_of_gap") is not none %}{% set rib.on = true %}{% endif %}{% endfor %}| Closure (wall treatment, cells) | {% for q in model_form.quantities %}{{ q }} | vs primary | {% if model_form.spread.get(q, {}).get("reference") %}vs {{ model_form.spread[q].reference.source }} | {% endif %}{% endfor %}y⁺ | {% if rib.on %}reattachment x/e | reversed gap | {% endif %}converged |
+|---|{% for q in model_form.quantities %}---|---|{% if model_form.spread.get(q, {}).get("reference") %}---|{% endif %}{% endfor %}---|{% if rib.on %}---|---|{% endif %}---|
+{% for m in model_form.members %}{% set dg = model_form.diagnostics.get(m.closure, {}) %}| {% set b = "**" if m.closure == model_form.primary else "" %}{{ b }}{{ m.closure }} ({{ (m.wall_treatment or "?") | replace("_", " ") }}, {{ m.n_cells if m.n_cells is not none else "?" }} cells){{ b }} | {% for q in model_form.quantities %}{{ fmt(m.get("values", {}).get(q)) }} | {% set dp = model_form.spread.get(q, {}).get("deviation_from_primary", {}).get(m.closure) %}{{ ("%+.1f %%" % (100 * dp)) if dp is not none else "—" }} | {% if model_form.spread.get(q, {}).get("reference") %}{% set dr = model_form.spread[q].reference.deviation.get(m.closure) %}{{ ("%+.1f %%" % (100 * dr)) if dr is not none else "—" }} | {% endif %}{% endfor %}{% set yp = dg.get("yplus_avg", dg.get("yplus_avg_estimate")) %}{{ ("%.1f" % yp) if yp is not none else "—" }} | {% if rib.on %}{{ fmt(dg.get("reattachment_x_over_e")) }} | {{ pct(dg.get("reversed_flow_fraction_of_gap")) }} | {% endif %}{{ "yes" if m.converged else "no — " ~ (m.reason or "") }} |
+{% endfor %}
+
+| QoI | closure range | model-form uncertainty (½ range) | numerical uncertainty (GCI) | dominant |
+|---|---|---|---|---|
+{% for q, s in model_form.spread.items() %}| {{ q }} | {{ fmt(s.min) }} – {{ fmt(s.max) }} | ±{{ "%.1f %%" % (100 * s.model_form_uncertainty) }} | {{ pct(s.gci_fine) }} | {{ s.dominant or "n/a" }} |
+{% endfor %}
+{% for s in model_form.get("skipped", []) %}- skipped: {{ s }}
+{% endfor %}
+{% if model_form_plot %}
+![model form]({{ model_form_plot }})
+{% endif %}
+{% endif %}
+
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Validation
 
 | QoI | Computed | Reference | Source | Deviation | Tolerance | Ref. band | Result |
 |---|---|---|---|---|---|---|---|
@@ -91,7 +120,7 @@ _No verification data._
 {% endif %}{% endfor %}
 
 {% if calibration %}
-## 6. Bayesian calibration
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Bayesian calibration
 
 {{ calibration.get("summary_markdown", "") }}
 {% if calibration.get("posterior_plot") %}
@@ -99,7 +128,7 @@ _No verification data._
 {% endif %}
 {% endif %}
 {% if uq %}
-## 7. Uncertainty quantification
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Uncertainty quantification
 
 {{ uq.get("summary_markdown", "") }}
 {% if uq.get("sobol_plot") %}
@@ -107,7 +136,7 @@ _No verification data._
 {% endif %}
 {% endif %}
 
-## {{ "8" if calibration or uq else "6" }}. Review
+{% set ns.n = ns.n + 1 %}## {{ ns.n }}. Review
 
 **Verdict:** {{ critique.get("verdict", "n/a") }} — {{ critique.get("summary", "") }}
 {% for w in critique.get("warnings", []) %}- ⚠ {{ w }}

@@ -28,6 +28,27 @@ def _developed_mask(x: np.ndarray, case: HeatedPipeCase) -> np.ndarray:
     return mask
 
 
+def _wall_nut(tdir: Path, mesh, patch: str) -> np.ndarray:
+    """Turbulent viscosity on a wall patch (zero for wall-resolved / laminar cases).
+
+    Wall functions (``nutkWallFunction``) store the wall value of nu_t that makes
+    tau_w = rho (nu + nu_t,w) dU/dn reproduce the log law; using it here makes the first-order wall-shear
+    and y+ estimates consistent with OpenFOAM's own ``wallShearStress`` function object.
+    """
+    n = mesh.patches[patch].n_faces
+    f = tdir / "nut"
+    if not f.exists():
+        return np.zeros(n)
+    try:
+        val = read_field(f).patch_value(patch, n)
+        arr = np.asarray(val, dtype=float).reshape(-1)
+        if arr.size == 1:
+            arr = np.full(n, float(arr[0]))
+        return np.nan_to_num(arr, nan=0.0)
+    except Exception:  # noqa: BLE001 - fall back to the molecular estimate
+        return np.zeros(n)
+
+
 def extract_heated_pipe_qois(
     case_dir: Path, case: HeatedPipeCase, stations: list[float]
 ) -> QoIResult:
@@ -92,11 +113,12 @@ def extract_heated_pipe_qois(
         )[order]
         tau_x = np.abs(tau_vec[:, 0])
     else:
-        tau_source = "near-wall velocity gradient (first-order estimate)"
+        tau_source = "near-wall velocity gradient (first-order estimate, mu + rho*nut_wall)"
         owners = mesh.patch_owner_cells("wall")[order]
         u_cell = U.internal_array[owners, 0]
         dn = np.linalg.norm(cc[owners] - wall_fc[order], axis=1)
-        tau_x = fluid.mu * np.abs(u_cell) / dn
+        nut_w = _wall_nut(tdir, mesh, "wall")[order]
+        tau_x = (fluid.mu + fluid.rho * nut_w) * np.abs(u_cell) / dn
         notes.append(f"wall shear stress from {tau_source}")
     f_tau = float(corr.darcy_from_wall_shear(np.mean(tau_x[developed]), fluid.rho, u_b))
     checks["tau_wall_developed"] = float(np.mean(tau_x[developed]))
@@ -336,7 +358,8 @@ def extract_ribbed_tube_qois(case_dir: Path, case, stations: list[float]) -> QoI
     if tube_wall.any():
         dn = np.linalg.norm(cc[owners[tube_wall]] - fc[order][tube_wall], axis=1)
         u_cell = np.abs(U.internal_array[owners[tube_wall], 0])
-        tau = fluid.mu * u_cell / dn
+        nut_w = _wall_nut(tdir, mesh, "wall")[order][tube_wall]
+        tau = (fluid.mu + fluid.rho * nut_w) * u_cell / dn
         u_tau = np.sqrt(np.mean(tau) / fluid.rho)
         checks["yplus_avg_estimate"] = float(np.mean(dn) * u_tau / fluid.nu)
     notes.append(

@@ -15,12 +15,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from nuagent.agent.cases import reusable_case
+from nuagent.agent.model_form import run_closure_ensemble
 from nuagent.agent.policy import Policy, RulesPolicy
+from nuagent.agent.preflight import preflight
 from nuagent.agent.state import AgentState, decision
-from nuagent.agent.vv import analytical_reference, compare, reference_for
+from nuagent.agent.vv import analytical_reference, compare, default_references, reference_for
 from nuagent.backends.base import CaseHandle, ConvergenceReport, QoIResult, SolverBackend
 from nuagent.executors.base import Executor
-from nuagent.spec import ExecutorKind, HeatedPipeCase, ReferenceSpec, RibbedTubeCase, SimulationSpec
+from nuagent.spec import ExecutorKind, HeatedPipeCase, SimulationSpec
 from nuagent.verification import grid_convergence_index
 
 DEFAULT_VV_QUANTITIES = {
@@ -70,25 +73,7 @@ class Runtime:
 # --------------------------------------------------------------------------- #
 
 
-def _reusable_case(
-    case_dir: Path, spec: SimulationSpec, adjustments: dict[str, Any]
-) -> CaseHandle | None:
-    """Return the existing case in ``case_dir`` if it was built from this exact spec and has run."""
-    meta = case_dir / "nuagent_case.json"
-    if not meta.exists():
-        return None
-    try:
-        d = json.loads(meta.read_text())
-        case = CaseHandle.from_dict(d["case"])
-    except Exception:  # noqa: BLE001
-        return None
-    from nuagent.backends.base import spec_hash
-
-    expected = spec_hash(spec, {"refinement": 1.0, "adjustments": adjustments or {}})
-    if case.spec_hash != expected:
-        return None
-    log = case.path / case.metadata.get("log", "log.run")
-    return case if log.exists() else None
+_reusable_case = reusable_case  # backwards-compatible alias
 
 
 def make_nodes(rt: Runtime) -> dict[str, Any]:
@@ -122,6 +107,45 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 "decisions": [decision("plan", str(exc))],
             }
 
+    def review(state: AgentState) -> dict:
+        """Independent pre-flight review of the specification before any solver time is spent.
+
+        Deterministic rules (correlation validity, y+ vs wall treatment, entry length, lessons learned
+        about closures, FESTIM time scales) are authoritative; an LLM policy may *add* concerns.
+        Blocking findings stop the workflow here — the cheapest place to fail.
+        """
+        spec = SimulationSpec.model_validate(state["spec"])
+        pf = preflight(spec)
+        if hasattr(rt.policy, "review"):
+            try:
+                for w in rt.policy.review(spec, pf):
+                    if w not in pf.warnings:
+                        pf.warnings.append(w)
+            except Exception as exc:  # noqa: BLE001 - review must never break the workflow
+                pf.notes.append(f"LLM review unavailable: {type(exc).__name__}")
+        out = pf.to_dict()
+        (Path(state["workdir"]) / "preflight.json").write_text(json.dumps(out, indent=2))
+        if not pf.ok:
+            return {
+                "preflight": out,
+                "status": "failed",
+                "error": "pre-flight review found blocking problems: " + "; ".join(pf.blocking),
+                "decisions": [
+                    decision(
+                        "review", "blocked before build", blocking=pf.blocking, warnings=pf.warnings
+                    )
+                ],
+            }
+        msg = (
+            f"{len(pf.warnings)} warning(s), {len(pf.notes)} note(s)"
+            if (pf.warnings or pf.notes)
+            else "no findings"
+        )
+        return {
+            "preflight": out,
+            "decisions": [decision("review", msg, warnings=pf.warnings, notes=pf.notes)],
+        }
+
     def build(state: AgentState) -> dict:
         spec = SimulationSpec.model_validate(state["spec"])
         attempt = state.get("attempt", 1)
@@ -149,7 +173,7 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 ],
             }
         case_dir = Path(state["workdir"]) / f"attempt_{attempt}"
-        existing = _reusable_case(case_dir, spec, adjustments)
+        existing = reusable_case(case_dir, spec, adjustments)
         if existing is not None:
             existing.metadata["reused"] = True
             return {
@@ -411,33 +435,49 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
             )
         return {"verification": out, "decisions": decisions}
 
+    def model_form(state: AgentState) -> dict:
+        """Closure ensemble on the base grid (orchestrator–workers; deterministic reduction)."""
+        spec = SimulationSpec.model_validate(state["spec"])
+        if spec.model_form is None or not spec.model_form.closures:
+            return {}
+        if not isinstance(spec.case, HeatedPipeCase) or spec.case.regime.value == "laminar":
+            return {
+                "decisions": [
+                    decision("model_form", "closure ensemble skipped: not a turbulent CFD case")
+                ]
+            }
+        try:
+            summary = run_closure_ensemble(rt, spec, dict(state))
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "model_form": {"error": str(exc)},
+                "decisions": [decision("model_form", f"closure ensemble failed: {exc}")],
+            }
+        (Path(state["workdir"]) / "model_form.json").write_text(
+            json.dumps(summary, indent=2, default=str)
+        )
+        spread = {
+            q: f"±{s['model_form_uncertainty'] * 100:.1f} %" for q, s in summary["spread"].items()
+        }
+        return {
+            "model_form": summary,
+            "decisions": [
+                decision(
+                    "model_form",
+                    f"{summary['n_converged']}/{len(summary['members'])} closures converged; "
+                    "model-form uncertainty " + ", ".join(f"{q} {v}" for q, v in spread.items()),
+                    closures=summary["closures"],
+                    spread=spread,
+                    skipped=summary.get("skipped", []),
+                )
+            ],
+        }
+
     def validate(state: AgentState) -> dict:
         spec = SimulationSpec.model_validate(state["spec"])
         qois = QoIResult(**state["qois"])
         gci = state.get("verification", {}).get("gci", {})
-        refs = list(spec.validation.references)
-        if not refs:  # sensible defaults so a run is never "unvalidated"
-            if isinstance(spec.case, RibbedTubeCase):
-                refs = [
-                    ReferenceSpec(quantity="Nu", source="webb", tolerance=0.20),
-                    ReferenceSpec(quantity="f", source="webb", tolerance=0.15),
-                ]
-            elif isinstance(spec.case, HeatedPipeCase):
-                if spec.case.regime.value == "laminar":
-                    refs = [
-                        ReferenceSpec(quantity="Nu", source="laminar", tolerance=0.03),
-                        ReferenceSpec(quantity="f", source="laminar", tolerance=0.03),
-                    ]
-                else:
-                    refs = [
-                        ReferenceSpec(quantity="Nu", source="gnielinski", tolerance=0.15),
-                        ReferenceSpec(quantity="f", source="petukhov", tolerance=0.10),
-                    ]
-            else:
-                refs = [
-                    ReferenceSpec(quantity=q, source="analytical", tolerance=0.05)
-                    for q in DEFAULT_VV_QUANTITIES.get(spec.case.kind, [])
-                ]
+        refs = default_references(spec)  # sensible defaults so a run is never "unvalidated"
         results: dict[str, Any] = {}
         for ref in refs:
             # first reference of a quantity is keyed by the bare name (plots look it up); extra ones by source
@@ -513,7 +553,15 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
     def critique(state: AgentState) -> dict:
         spec = SimulationSpec.model_validate(state["spec"])
         results = {
-            k: state.get(k, {}) for k in ("qois", "verification", "validation", "convergence")
+            k: state.get(k, {})
+            for k in (
+                "qois",
+                "verification",
+                "validation",
+                "convergence",
+                "model_form",
+                "preflight",
+            )
         }
         crit = rt.policy.critique(spec, results)
         return {
@@ -549,6 +597,7 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
 
     return {
         "plan": plan,
+        "review": review,
         "build": build,
         "approve": approve,
         "run": run,
@@ -556,6 +605,7 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
         "diagnose": diagnose,
         "postprocess": postprocess,
         "verify": verify,
+        "model_form": model_form,
         "validate": validate,
         "calibrate": calibrate,
         "uq": uq,

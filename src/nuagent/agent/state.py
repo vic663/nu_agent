@@ -18,6 +18,7 @@ class AgentState(TypedDict, total=False):
     task: str  # natural-language request (LLM planning) — optional if spec is given
     spec: dict[str, Any]  # SimulationSpec.model_dump(mode="json")
     workdir: str
+    preflight: dict[str, Any]  # PreflightReview.to_dict(): warnings / blocking / notes
     # execution bookkeeping
     attempt: int
     adjustments: dict[str, Any]
@@ -28,6 +29,7 @@ class AgentState(TypedDict, total=False):
     qois: dict[str, Any]  # QoIResult.to_dict()
     # V&V, calibration, UQ
     verification: dict[str, Any]
+    model_form: dict[str, Any]  # closure-ensemble summary (model-form uncertainty)
     validation: dict[str, Any]
     calibration: dict[str, Any]
     uq: dict[str, Any]

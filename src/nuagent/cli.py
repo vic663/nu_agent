@@ -241,28 +241,37 @@ def eval_cmd(
     policy: str = typer.Option("rules"),
     model: str | None = typer.Option(None),
     out: Path = typer.Option(Path("runs/evals")),
+    repeats: int = typer.Option(
+        1, min=1, help="Independent trials per task; reports pass^k reliability (τ-bench)"
+    ),
 ):
-    """Agent qualification: run the task suite and score success, retries, V&V outcomes."""
+    """Agent qualification: run the task suite and score success, retries, V&V outcomes, pass^k."""
     from nuagent.evals.harness import run_suite
 
     rt = _runtime(backend, "local", policy, model)
-    scoreboard = run_suite(tasks, rt, out)
-    t = Table(title=f"Eval suite — backend={backend} policy={policy}")
-    for c in ("task", "status", "attempts", "validated", "GCI ok", "wall [s]"):
+    scoreboard = run_suite(tasks, rt, out, repeats=repeats)
+    t = Table(title=f"Eval suite — backend={backend} policy={policy} repeats={repeats}")
+    for c in ("task", "rep", "status", "attempts", "validated", "GCI ok", "review", "wall [s]"):
         t.add_column(c)
     for r in scoreboard["tasks"]:
         t.add_row(
             r["task"],
+            str(r["repeat"]),
             r["status"],
             str(r["attempts"]),
             "yes" if r["validated"] else "no",
             "yes" if r["gci_ok"] else "no",
+            str(r.get("critique_verdict") or "-"),
             f"{r['wall_time_s']:.1f}",
         )
     console.print(t)
     console.print(
         f"success rate: [bold]{scoreboard['success_rate']:.0%}[/]  validated: {scoreboard['validation_rate']:.0%}  mean attempts: {scoreboard['mean_attempts']:.2f}"
     )
+    if repeats > 1:
+        console.print(
+            "pass^k: " + "  ".join(f"k={k}: {v:.2f}" for k, v in scoreboard["pass_hat_k"].items())
+        )
     console.print(f"scoreboard: {out / 'scoreboard.json'}")
 
 
