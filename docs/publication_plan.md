@@ -33,6 +33,8 @@ NURETH (agentic workflows are a hot topic there).
 4. Reduced-order → high-fidelity Bayesian calibration of tritium trap parameters with surrogate error
    accounting.
 5. A coupled coolant-channel → tritium-permeation demonstration.
+6. Model-form discovery in the loop: the rib-roughened tube where k-ω SST predicts a d-type cavity flow and the
+   physics-aware critique detects it (see `docs/case_catalogue.md` §D1 and `docs/literature_review.md`).
 
 ## Experiment matrix
 

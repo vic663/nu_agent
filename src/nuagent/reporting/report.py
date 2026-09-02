@@ -43,7 +43,7 @@ def pct(v: Any) -> str:
 def case_table(spec: SimulationSpec) -> list[tuple[str, str]]:
     case = spec.case
     rows: list[tuple[str, str]] = []
-    if case.kind == "heated_pipe":
+    if case.kind in ("heated_pipe", "ribbed_tube"):
         rows += [
             (
                 "Fluid",
@@ -102,6 +102,26 @@ def case_table(spec: SimulationSpec) -> list[tuple[str, str]]:
             ),
             ("Traps", ", ".join(f"{t.name}: E_p={t.E_p} eV, n={t.n:.2g} m⁻³" for t in case.traps)),
         ]
+    if case.kind == "ribbed_tube":
+        rows[1] = (
+            "Diameter / length",
+            f"{case.diameter} m / {case.length:.4g} m (smooth entry {case.inlet_length_over_diameter} D, "
+            f"{case.n_ribs} ribs, exit {case.outlet_length_over_diameter} D)",
+        )
+        rows.insert(
+            2,
+            (
+                "Ribs",
+                f"e/D = {case.rib_height_over_diameter}, p/e = {case.rib_pitch_over_height}, "
+                f"w/e = {case.rib_width_over_height} (e = {case.rib_height * 1e3:.3g} mm, "
+                f"p = {case.rib_pitch * 1e3:.3g} mm); {case.developed_modules} modules averaged",
+            ),
+        )
+        rows[-1] = (
+            "Base mesh",
+            f"{case.mesh.n_radial} core + {case.mesh.n_radial_rib} rib-layer radial cells, "
+            f"{case.mesh.cells_per_rib_height} axial cells per rib height, target y+ = {case.mesh.target_yplus}",
+        )
     rows.append(
         (
             "Execution",

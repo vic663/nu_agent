@@ -12,7 +12,7 @@ FoamFile
 
 application     buoyantSimpleFoam;
 
-startFrom       startTime;
+startFrom       {{ start_from | default('startTime') }};
 startTime       0;
 stopAt          endTime;
 endTime         {{ max_iterations }};

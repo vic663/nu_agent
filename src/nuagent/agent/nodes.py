@@ -20,11 +20,12 @@ from nuagent.agent.state import AgentState, decision
 from nuagent.agent.vv import analytical_reference, compare, reference_for
 from nuagent.backends.base import CaseHandle, ConvergenceReport, QoIResult, SolverBackend
 from nuagent.executors.base import Executor
-from nuagent.spec import ExecutorKind, HeatedPipeCase, ReferenceSpec, SimulationSpec
+from nuagent.spec import ExecutorKind, HeatedPipeCase, ReferenceSpec, RibbedTubeCase, SimulationSpec
 from nuagent.verification import grid_convergence_index
 
 DEFAULT_VV_QUANTITIES = {
     "heated_pipe": ["Nu", "f"],
+    "ribbed_tube": ["Nu", "f"],
     "permeation": ["permeation_flux_ss", "time_lag"],
     "tds": ["T_peak"],
 }
@@ -57,16 +58,37 @@ class Runtime:
             return "stop"
         return None
 
-    def run_case(self, spec: SimulationSpec, case: CaseHandle):
+    def run_case(self, spec: SimulationSpec, case: CaseHandle, args: tuple[str, ...] = ()):
         executor = self.executor
         if hasattr(executor, "on_poll") and executor.on_poll is None:
             executor.on_poll = self._poll
-        return executor.run(case, spec.execution)
+        return executor.run(case, spec.execution, args=args)
 
 
 # --------------------------------------------------------------------------- #
 # Nodes
 # --------------------------------------------------------------------------- #
+
+
+def _reusable_case(
+    case_dir: Path, spec: SimulationSpec, adjustments: dict[str, Any]
+) -> CaseHandle | None:
+    """Return the existing case in ``case_dir`` if it was built from this exact spec and has run."""
+    meta = case_dir / "nuagent_case.json"
+    if not meta.exists():
+        return None
+    try:
+        d = json.loads(meta.read_text())
+        case = CaseHandle.from_dict(d["case"])
+    except Exception:  # noqa: BLE001
+        return None
+    from nuagent.backends.base import spec_hash
+
+    expected = spec_hash(spec, {"refinement": 1.0, "adjustments": adjustments or {}})
+    if case.spec_hash != expected:
+        return None
+    log = case.path / case.metadata.get("log", "log.run")
+    return case if log.exists() else None
 
 
 def make_nodes(rt: Runtime) -> dict[str, Any]:
@@ -104,7 +126,42 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
         spec = SimulationSpec.model_validate(state["spec"])
         attempt = state.get("attempt", 1)
         adjustments = state.get("adjustments", {})
+        if state.get("continue_case") and state.get("case") and hasattr(rt.backend, "extend_case"):
+            # stalled-but-healthy run: keep mesh and fields, extend the budget, restart from latest time
+            prev = CaseHandle.from_dict(state["case"])
+            try:
+                case = rt.backend.extend_case(spec, prev, adjustments)
+            except Exception as exc:  # noqa: BLE001
+                return {
+                    "status": "failed",
+                    "error": f"could not extend case: {exc}",
+                    "decisions": [decision("build", str(exc))],
+                }
+            return {
+                "case": case.to_dict(),
+                "decisions": [
+                    decision(
+                        "build",
+                        f"continuing case from its latest time (attempt {attempt}, {case.n_cells} cells)",
+                        path=str(case.path),
+                        adjustments=adjustments,
+                    )
+                ],
+            }
         case_dir = Path(state["workdir"]) / f"attempt_{attempt}"
+        existing = _reusable_case(case_dir, spec, adjustments)
+        if existing is not None:
+            existing.metadata["reused"] = True
+            return {
+                "case": existing.to_dict(),
+                "decisions": [
+                    decision(
+                        "build",
+                        f"reusing existing case with identical specification (attempt {attempt})",
+                        path=str(existing.path),
+                    )
+                ],
+            }
         try:
             case = rt.backend.build(spec, case_dir, refinement=1.0, adjustments=adjustments)
         except Exception as exc:  # noqa: BLE001
@@ -159,7 +216,16 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 "error": "execution not approved",
                 "decisions": [decision("run", "not approved")],
             }
-        result = rt.run_case(spec, case)
+        if case.metadata.pop("reused", False) and not state.get("continue_case"):
+            from nuagent.executors.base import RunResult
+
+            result = RunResult(returncode=0, wall_time_s=0.0, executor="cached", stdout_tail="")
+            return {
+                "run": result.to_dict(),
+                "decisions": [decision("run", "existing results reused; solver not re-run")],
+            }
+        args = ("--continue",) if state.get("continue_case") else ()
+        result = rt.run_case(spec, case, args)
         return {
             "run": result.to_dict(),
             "decisions": [
@@ -206,9 +272,13 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 "decisions": [decision("diagnose", f"giving up: {why}", proposal=adj.as_dict())],
             }
         current.update(adj.as_dict())
+        # a run that completed cleanly but stalled can be *continued* (mesh + fields kept) when only
+        # numerics change; a diverged run must be rebuilt from scratch
+        continue_case = bool(report.completed and not report.diverged)
         return {
             "attempt": attempt + 1,
             "adjustments": current,
+            "continue_case": continue_case,
             "decisions": [
                 decision(
                     "diagnose",
@@ -347,7 +417,12 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
         gci = state.get("verification", {}).get("gci", {})
         refs = list(spec.validation.references)
         if not refs:  # sensible defaults so a run is never "unvalidated"
-            if isinstance(spec.case, HeatedPipeCase):
+            if isinstance(spec.case, RibbedTubeCase):
+                refs = [
+                    ReferenceSpec(quantity="Nu", source="webb", tolerance=0.20),
+                    ReferenceSpec(quantity="f", source="webb", tolerance=0.15),
+                ]
+            elif isinstance(spec.case, HeatedPipeCase):
                 if spec.case.regime.value == "laminar":
                     refs = [
                         ReferenceSpec(quantity="Nu", source="laminar", tolerance=0.03),

@@ -1,0 +1,24 @@
+task: >
+  Turbine-blade cooling passage analogue: air flows at Re = 20000 through a 20 mm tube with 12 square
+  transverse ribs (e/D = 0.04, p/e = 10) and 1 kW/m2 wall heating. Compute the periodic fully developed
+  Nusselt number and friction factor with a wall-resolved low-Re k-epsilon closure and validate them against the
+  Webb-Eckert-Goldstein rib-roughness correlations; report the enhancement over a smooth tube.
+spec:
+  name: eval-ribbed-tube
+  backend: mock
+  case:
+    kind: ribbed_tube
+    fluid: {name: air_300K, rho: 1.16, mu: 1.85e-5, cp: 1007.0, k: 0.0263, mol_weight: 28.96}
+    diameter: 0.02
+    reynolds: 20000
+    wall_heat_flux: 1000.0
+    turbulence_model: LaunderSharmaKE
+    rib_height_over_diameter: 0.04
+    rib_pitch_over_height: 10.0
+  validation:
+    references:
+      - {quantity: Nu, source: webb, tolerance: 0.20}
+      - {quantity: f, source: webb, tolerance: 0.15}
+expect:
+  qoi_ranges: {Nu: [110, 175], f: [0.19, 0.29], Nu_over_Nu0: [2.0, 3.5]}
+  max_attempts: 1

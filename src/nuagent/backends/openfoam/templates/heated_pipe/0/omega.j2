@@ -1,4 +1,4 @@
-{% set field_class = "volScalarField" %}{% set field_name = "omega" %}{% include "0/_header.j2" %}
+{% set field_class = "volScalarField" %}{% set field_name = "omega" %}{% include "heated_pipe/0/_header.j2" %}
 
 dimensions      [0 0 -1 0 0 0 0];
 
@@ -23,7 +23,7 @@ boundaryField
         type            omegaWallFunction;
         value           $internalField;
     }
-{% include "0/_wedge.j2" %}
+{% include "heated_pipe/0/_wedge.j2" %}
 }
 
 // ************************************************************************* //

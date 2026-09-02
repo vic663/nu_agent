@@ -32,6 +32,16 @@ class TurbulenceModel(str, Enum):
     LAMINAR = "laminar"
     K_OMEGA_SST = "kOmegaSST"
     K_EPSILON = "kEpsilon"
+    REALIZABLE_KE = "realizableKE"
+    LAUNDER_SHARMA_KE = "LaunderSharmaKE"  # low-Re k-epsilon (wall-resolved)
+
+    @property
+    def uses_epsilon(self) -> bool:
+        return self in (
+            TurbulenceModel.K_EPSILON,
+            TurbulenceModel.REALIZABLE_KE,
+            TurbulenceModel.LAUNDER_SHARMA_KE,
+        )
 
 
 class WallTreatment(str, Enum):
@@ -246,6 +256,83 @@ class HeatedPipeCase(BaseModel):
         return self
 
 
+class RibbedMeshSpec(MeshSpec):
+    """Mesh controls for the rib-roughened tube (core + rib-layer blocks)."""
+
+    n_radial: int = Field(36, ge=4, le=400, description="Cells across the core (axis to rib tip)")
+    n_radial_rib: int = Field(
+        16, ge=2, le=100, description="Cells across the rib height (rib tip to wall)"
+    )
+    cells_per_rib_height: float = Field(
+        10.0,
+        gt=0,
+        le=40,
+        description="Axial cells per rib height at the rib faces (gap cells stretch 4x toward mid-gap)",
+    )
+
+
+class RibbedTubeCase(HeatedPipeCase):
+    """Turbulent flow in a tube with transverse repeated ribs (turbulator-enhanced cooling passage).
+
+    This is the axisymmetric analogue of a rib-roughened turbine-blade cooling channel and
+    of an enhanced heat-exchanger tube: square ribs of height ``e`` and pitch ``p`` protrude
+    from the heated wall, tripping the boundary layer and raising both heat transfer and
+    friction.  Validated against the Webb–Eckert–Goldstein (1971) roughness-function
+    correlations; the smooth-tube values (Gnielinski / Petukhov) give the enhancement ratios
+    Nu/Nu0 and f/f0 and the thermal-performance factor (Nu/Nu0)/(f/f0)^(1/3).
+    """
+
+    kind: Literal["ribbed_tube"] = "ribbed_tube"  # type: ignore[assignment]
+    rib_height_over_diameter: float = Field(
+        0.04, gt=0.005, le=0.15, description="Rib height e/D (Webb correlation valid 0.01-0.04)"
+    )
+    rib_pitch_over_height: float = Field(
+        10.0, ge=5.0, le=40.0, description="Rib pitch p/e (10 is the classical optimum)"
+    )
+    rib_width_over_height: float = Field(
+        1.0, ge=0.5, le=3.0, description="Rib width w/e (1 = square)"
+    )
+    n_ribs: int = Field(12, ge=3, le=80, description="Number of ribs in the heated section")
+    inlet_length_over_diameter: float = Field(5.0, ge=0, le=50, description="Smooth entry length")
+    outlet_length_over_diameter: float = Field(2.0, ge=0, le=50, description="Smooth exit length")
+    developed_modules: int = Field(
+        4,
+        ge=1,
+        description="Number of rib pitches (before the last one) averaged as periodic fully developed",
+    )
+    mesh: RibbedMeshSpec = Field(default_factory=RibbedMeshSpec)  # type: ignore[assignment]
+
+    @property
+    def rib_height(self) -> float:
+        return self.rib_height_over_diameter * self.diameter
+
+    @property
+    def rib_pitch(self) -> float:
+        return self.rib_pitch_over_height * self.rib_height
+
+    @property
+    def rib_width(self) -> float:
+        return self.rib_width_over_height * self.rib_height
+
+    @property
+    def ribbed_length(self) -> float:
+        return self.n_ribs * self.rib_pitch
+
+    @model_validator(mode="after")
+    def _derive_length(self) -> RibbedTubeCase:
+        total = (
+            self.inlet_length_over_diameter * self.diameter
+            + self.ribbed_length
+            + self.outlet_length_over_diameter * self.diameter
+        )
+        object.__setattr__(self, "length_over_diameter", total / self.diameter)
+        if self.developed_modules >= self.n_ribs - 1:
+            raise ValueError("developed_modules must be smaller than n_ribs - 1")
+        if self.rib_width >= self.rib_pitch:
+            raise ValueError("rib width must be smaller than the pitch")
+        return self
+
+
 class PermeationCase(BaseModel):
     """Transient hydrogen-isotope permeation through a 1-D slab (FESTIM).
 
@@ -293,7 +380,9 @@ class TDSCase(BaseModel):
     n_cells: int = Field(500, ge=10, le=100_000)
 
 
-CaseSpec = Annotated[HeatedPipeCase | PermeationCase | TDSCase, Field(discriminator="kind")]
+CaseSpec = Annotated[
+    HeatedPipeCase | RibbedTubeCase | PermeationCase | TDSCase, Field(discriminator="kind")
+]
 
 
 # --------------------------------------------------------------------------- #

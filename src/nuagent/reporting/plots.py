@@ -35,6 +35,8 @@ def plot_profiles(
     spec: dict[str, Any], profiles: dict[str, Any], validation: dict[str, Any], path: Path
 ) -> Path | None:
     kind = spec["case"]["kind"]
+    if kind == "ribbed_tube" and "module_Nu" in profiles:
+        return _plot_ribbed(spec, profiles, validation, path)
     if kind == "heated_pipe" and "x" in profiles and "Nu_local" in profiles:
         D = spec["case"]["diameter"]
         x = np.array(profiles["x"]) / D
@@ -162,6 +164,40 @@ def plot_sobol(
     ax.set_title(title)
     ax.legend(fontsize=8)
     ax.grid(axis="y", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(path, dpi=130)
+    plt.close(fig)
+    return path
+
+
+def _plot_ribbed(
+    spec: dict[str, Any], profiles: dict[str, Any], validation: dict[str, Any], path: Path
+) -> Path:
+    D = spec["case"]["diameter"]
+    x = np.array(profiles["x"]) / D
+    fig, axes = plt.subplots(1, 2, figsize=(9, 3.6))
+    n_mod = len(profiles["module_Nu"])
+    axes[0].bar(range(1, n_mod + 1), profiles["module_Nu"], color="C0", label="CFD, per pitch")
+    ref = validation.get("results", {}).get("Nu", {})
+    if "reference" in ref:
+        band = ref.get("reference_uncertainty", 0.0)
+        axes[0].axhline(ref["reference"], color="k", ls="--", lw=1, label=ref["source"])
+        if band:
+            axes[0].axhspan(
+                ref["reference"] * (1 - band), ref["reference"] * (1 + band), color="k", alpha=0.08
+            )
+    axes[0].set_xlabel("developed module")
+    axes[0].set_ylabel("Nu (nominal area)")
+    axes[0].set_title("Module-averaged Nusselt number")
+    axes[0].grid(alpha=0.3, axis="y")
+    axes[0].legend(fontsize=8)
+    axes[1].plot(x, profiles["T_wall"], lw=0.8, label="T_wall (CFD, all wetted faces)")
+    axes[1].plot(x, profiles["T_bulk"], lw=1.2, label="T_bulk (energy balance)")
+    axes[1].set_xlabel("x / D")
+    axes[1].set_ylabel("T [K]")
+    axes[1].set_title("Wall and bulk temperature")
+    axes[1].grid(alpha=0.3)
+    axes[1].legend(fontsize=8)
     fig.tight_layout()
     fig.savefig(path, dpi=130)
     plt.close(fig)

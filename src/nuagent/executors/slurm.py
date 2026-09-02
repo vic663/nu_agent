@@ -67,7 +67,9 @@ class SlurmExecutor:
         return shutil.which(self.sbatch) is not None
 
     # ------------------------------------------------------------------ #
-    def render_script(self, case: CaseHandle, execution: ExecutionSpec) -> str:
+    def render_script(
+        self, case: CaseHandle, execution: ExecutionSpec, args: tuple[str, ...] = ()
+    ) -> str:
         n_tasks = execution.n_procs
         nodes = max(1, -(-n_tasks // self.cores_per_node))
         modules = [m for m in os.environ.get("NUAGENT_SLURM_MODULES", "").split(":") if m]
@@ -85,11 +87,12 @@ class SlurmExecutor:
             foam_bashrc=os.environ.get("NUAGENT_FOAM_BASHRC", ""),
             festim_python=os.environ.get("NUAGENT_FESTIM_PYTHON", ""),
             nuagent_version=__version__,
+            run_args=" ".join(args),
         )
 
-    def submit(self, case: CaseHandle, execution: ExecutionSpec) -> str:
+    def submit(self, case: CaseHandle, execution: ExecutionSpec, args: tuple[str, ...] = ()) -> str:
         script = case.path / "job.sbatch"
-        script.write_text(self.render_script(case, execution))
+        script.write_text(self.render_script(case, execution, args))
         out = subprocess.run(
             [self.sbatch, "--parsable", str(script)], capture_output=True, text=True, check=True
         )
@@ -126,12 +129,16 @@ class SlurmExecutor:
             time.sleep(self.poll_interval)
 
     def run(
-        self, case: CaseHandle, execution: ExecutionSpec, timeout_s: float | None = None
+        self,
+        case: CaseHandle,
+        execution: ExecutionSpec,
+        timeout_s: float | None = None,
+        args: tuple[str, ...] = (),
     ) -> RunResult:
         # queue wait is not counted in the solver wall-clock budget; allow a generous margin
         timeout_s = timeout_s or (execution.wallclock_minutes * 60.0 * 3 + 3600)
         t0 = time.time()
-        job_id = self.submit(case, execution)
+        job_id = self.submit(case, execution, args)
         state = self.wait(case, job_id, timeout_s)
         rc_file = case.path / ".nuagent_exit_code"
         rc = (

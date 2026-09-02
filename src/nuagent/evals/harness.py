@@ -41,7 +41,10 @@ def grade_plan(planned: SimulationSpec, reference: SimulationSpec) -> dict[str, 
         "backend": planned.backend == reference.backend,
         "case_kind": planned.case.kind == reference.case.kind,
     }
-    if planned.case.kind == reference.case.kind == "heated_pipe":
+    if planned.case.kind == reference.case.kind and planned.case.kind in (
+        "heated_pipe",
+        "ribbed_tube",
+    ):
         checks["regime"] = planned.case.regime == reference.case.regime
         checks["turbulence_model"] = (
             planned.case.turbulence_model == reference.case.turbulence_model

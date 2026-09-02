@@ -32,11 +32,12 @@ from nuagent.backends.base import (
     write_case_metadata,
 )
 from nuagent.backends.openfoam.logparse import parse_checkmesh, parse_log_file
-from nuagent.backends.openfoam.mesh import size_pipe_mesh
-from nuagent.backends.openfoam.postprocess import extract_heated_pipe_qois
+from nuagent.backends.openfoam.mesh import size_pipe_mesh, size_ribbed_mesh
+from nuagent.backends.openfoam.postprocess import extract_heated_pipe_qois, extract_ribbed_tube_qois
 from nuagent.spec import (
     HeatedPipeCase,
     NumericsSpec,
+    RibbedTubeCase,
     SimulationSpec,
     TurbulenceModel,
     WallTreatment,
@@ -77,13 +78,108 @@ def find_foam_bashrc() -> Path | None:
     return None
 
 
+def ribbed_blockmesh_context(case: RibbedTubeCase, mesh, theta: float) -> dict[str, Any]:
+    """Vertices, blocks and patch faces of the multi-block ribbed-tube wedge.
+
+    Vertex ids per station i: A=5i (axis), Bm/Bp=5i+1/5i+2 (rib-tip radius at -/+theta),
+    Cm/Cp=5i+3/5i+4 (wall radius at -/+theta).  Face vertex lists follow the local hex
+    face convention used by blockMesh for the two block types.
+    """
+    r1 = mesh.rib_tip_radius
+    stations = mesh.stations
+    segs = mesh.segments
+    blocks, inlet, outlet, wall, front, back, axis = [], [], [], [], [], [], []
+
+    def ids(i):
+        b = 5 * i
+        return b, b + 1, b + 2, b + 3, b + 4  # A, Bm, Bp, Cm, Cp
+
+    for i, seg in enumerate(segs):
+        A0, Bm0, Bp0, Cm0, Cp0 = ids(i)
+        A1, Bm1, Bp1, Cm1, Cp1 = ids(i + 1)
+        gx = seg.axial_grading
+        # core block: axis -> rib tip radius (collapsed at the axis)
+        blocks.append(
+            {
+                "segment": i,
+                "kind": seg.kind,
+                "layer": "core",
+                "v": [A0, A1, Bm1, Bm0, A0, A1, Bp1, Bp0],
+                "nx": seg.n_axial,
+                "ny": mesh.n_core,
+                "gx": gx,
+                "gy": f"{mesh.core_grading:.6g}",
+            }
+        )
+        axis.append([A0, A1, A1, A0])
+        front.append([A0, Bm0, Bm1, A1])
+        back.append([A0, A1, Bp1, Bp0])
+        if seg.kind == "rib":
+            wall.append([Bm0, Bp0, Bp1, Bm1])  # rib top (core block outer face)
+        else:
+            # rib-layer block: rib tip radius -> wall
+            blocks.append(
+                {
+                    "segment": i,
+                    "kind": seg.kind,
+                    "layer": "rib layer",
+                    "v": [Bm0, Bm1, Cm1, Cm0, Bp0, Bp1, Cp1, Cp0],
+                    "nx": seg.n_axial,
+                    "ny": mesh.n_rib_layer,
+                    "gx": gx,
+                    "gy": mesh.rib_layer_grading,
+                }
+            )
+            wall.append([Cm0, Cp0, Cp1, Cm1])  # tube wall
+            front.append([Bm0, Cm0, Cm1, Bm1])
+            back.append([Bp0, Bp1, Cp1, Cp0])
+            prev_rib = i > 0 and segs[i - 1].kind == "rib"
+            next_rib = i + 1 < len(segs) and segs[i + 1].kind == "rib"
+            if prev_rib:
+                wall.append([Bm0, Bp0, Cp0, Cm0])  # downstream face of the previous rib
+            if next_rib:
+                wall.append([Bm1, Cm1, Cp1, Bp1])  # upstream face of the next rib
+        if i == 0:
+            inlet.append([A0, A0, Bp0, Bm0])
+            if seg.kind != "rib":
+                inlet.append([Bm0, Bp0, Cp0, Cm0])
+        if i == len(segs) - 1:
+            outlet.append([A1, Bm1, Bp1, A1])
+            if seg.kind != "rib":
+                outlet.append([Bm1, Cm1, Cp1, Bp1])
+
+    return {
+        "station_vertices": [{"x": f"{x:.10g}"} for x in stations],
+        "r1y": f"{r1 * math.cos(theta):.10g}",
+        "r1z_pos": f"{r1 * math.sin(theta):.10g}",
+        "r1z_neg": f"{-r1 * math.sin(theta):.10g}",
+        "blocks": blocks,
+        "n_blocks": len(blocks),
+        "n_cells": mesh.n_cells,
+        "inlet_faces": inlet,
+        "outlet_faces": outlet,
+        "wall_faces": wall,
+        "front_faces": front,
+        "back_faces": back,
+        "axis_faces": axis,
+        "n_ribs": case.n_ribs,
+        "e_over_D": case.rib_height_over_diameter,
+        "p_over_e": case.rib_pitch_over_height,
+        "w_over_e": case.rib_width_over_height,
+        "inlet_length": case.inlet_length_over_diameter * case.diameter,
+        "ribbed_length": case.ribbed_length,
+        "outlet_length": case.outlet_length_over_diameter * case.diameter,
+    }
+
+
 class OpenFOAMBackend:
     name = "openfoam"
 
-    def __init__(self, template_set: str = "heated_pipe") -> None:
-        self.template_set = template_set
+    def __init__(self) -> None:
+        # one loader over the template root: field/numerics templates are shared ("heated_pipe/..."),
+        # only the blockMeshDict differs between the smooth pipe and the ribbed tube
         self.env = Environment(
-            loader=FileSystemLoader(str(TEMPLATE_ROOT / template_set)),
+            loader=FileSystemLoader(str(TEMPLATE_ROOT)),
             undefined=StrictUndefined,
             keep_trailing_newline=True,
             trim_blocks=True,
@@ -123,7 +219,8 @@ class OpenFOAMBackend:
         if not isinstance(case, HeatedPipeCase):
             raise TypeError("OpenFOAM backend currently supports HeatedPipeCase only")
         numerics = self.apply_adjustments(case.numerics, adjustments)
-        mesh = size_pipe_mesh(case, refinement)
+        ribbed = isinstance(case, RibbedTubeCase)
+        mesh = size_ribbed_mesh(case, refinement) if ribbed else size_pipe_mesh(case, refinement)
         fluid = case.fluid
         turbulent = case.turbulence_model is not TurbulenceModel.LAMINAR
         radius = 0.5 * case.diameter
@@ -135,7 +232,7 @@ class OpenFOAMBackend:
         omega_in = math.sqrt(k_in) / (c_mu**0.25 * mixing_length)
         epsilon_in = c_mu**0.75 * k_in**1.5 / mixing_length
         stations = default_stations(case.length)
-        return {
+        ctx: dict[str, Any] = {
             "nuagent_version": __version__,
             "case_name": spec.name,
             "application": APPLICATION,
@@ -148,9 +245,11 @@ class OpenFOAMBackend:
             "ry": radius * math.cos(theta),
             "rz_pos": radius * math.sin(theta),
             "rz_neg": -radius * math.sin(theta),
-            "n_axial": mesh.n_axial,
-            "n_radial": mesh.n_radial,
-            "radial_grading": f"{mesh.radial_grading:.6g}",
+            "n_axial": getattr(mesh, "n_axial", None),
+            "n_radial": getattr(mesh, "n_radial", None),
+            "radial_grading": f"{mesh.radial_grading:.6g}"
+            if hasattr(mesh, "radial_grading")
+            else None,
             # fluid
             "fluid_name": fluid.name,
             "rho": fluid.rho,
@@ -189,7 +288,11 @@ class OpenFOAMBackend:
             "_mesh": mesh,
             "_numerics": numerics,
             "_stations": stations,
+            "_ribbed": ribbed,
         }
+        if ribbed:
+            ctx.update(ribbed_blockmesh_context(case, mesh, theta))
+        return ctx
 
     def build(
         self,
@@ -207,8 +310,8 @@ class OpenFOAMBackend:
             shutil.rmtree(workdir)
         workdir.mkdir(parents=True)
 
+        blockmesh_set = "ribbed_tube" if ctx["_ribbed"] else "heated_pipe"
         files = [
-            "system/blockMeshDict",
             "system/controlDict",
             "system/fvSchemes",
             "system/fvSolution",
@@ -224,16 +327,17 @@ class OpenFOAMBackend:
         ]
         if turbulent:
             files += ["0/nut", "0/k"]
-            files.append(
-                "0/omega" if case.turbulence_model is TurbulenceModel.K_OMEGA_SST else "0/epsilon"
-            )
+            files.append("0/epsilon" if case.turbulence_model.uses_epsilon else "0/omega")
 
         for rel in files:
             out = workdir / rel
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(self.env.get_template(rel + ".j2").render(**ctx))
+            out.write_text(self.env.get_template(f"heated_pipe/{rel}.j2").render(**ctx))
+        (workdir / "system/blockMeshDict").write_text(
+            self.env.get_template(f"{blockmesh_set}/system/blockMeshDict.j2").render(**ctx)
+        )
         allrun = workdir / "Allrun"
-        allrun.write_text(self.env.get_template("Allrun.j2").render(**ctx))
+        allrun.write_text(self.env.get_template("heated_pipe/Allrun.j2").render(**ctx))
         allrun.chmod(0o755)
 
         mesh = ctx["_mesh"]
@@ -256,6 +360,30 @@ class OpenFOAMBackend:
         write_case_metadata(handle, spec)
         return handle
 
+    def extend_case(
+        self, spec: SimulationSpec, case: CaseHandle, adjustments: dict[str, Any] | None
+    ) -> CaseHandle:
+        """Re-render the numerics dictionaries of an existing case and restart from the latest time.
+
+        Used when a run completed without diverging but did not meet the residual target: the
+        iteration budget (and optionally relaxation factors / schemes) change, the mesh and the
+        fields are kept, so no work is thrown away.  ``Allrun --continue`` skips meshing.
+        """
+        ctx = self.render_context(spec, case.refinement, adjustments)
+        ctx["start_from"] = "latestTime"
+        for rel in ("system/controlDict", "system/fvSchemes", "system/fvSolution"):
+            (case.path / rel).write_text(
+                self.env.get_template(f"heated_pipe/{rel}.j2").render(**ctx)
+            )
+        case.metadata["numerics"] = ctx["_numerics"].model_dump()
+        case.metadata["adjustments"] = adjustments or {}
+        case.metadata["continued"] = case.metadata.get("continued", 0) + 1
+        case.spec_hash = spec_hash(
+            spec, {"refinement": case.refinement, "adjustments": adjustments or {}}
+        )
+        write_case_metadata(case, spec)
+        return case
+
     # ------------------------------------------------------------------ #
     def parse_log(self, case: CaseHandle) -> ConvergenceReport:
         target = case.metadata.get("numerics", {}).get("residual_target")
@@ -270,4 +398,6 @@ class OpenFOAMBackend:
 
     def extract_qois(self, case: CaseHandle, spec: SimulationSpec) -> QoIResult:
         assert isinstance(spec.case, HeatedPipeCase)
+        if isinstance(spec.case, RibbedTubeCase):
+            return extract_ribbed_tube_qois(case.path, spec.case, case.metadata["stations"])
         return extract_heated_pipe_qois(case.path, spec.case, case.metadata["stations"])

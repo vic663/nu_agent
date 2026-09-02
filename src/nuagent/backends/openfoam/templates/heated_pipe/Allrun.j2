@@ -18,18 +18,29 @@ fi
 command -v blockMesh >/dev/null 2>&1 || { echo "[nuagent] OpenFOAM not found" >&2; exit 127; }
 echo "[nuagent] OpenFOAM ${WM_PROJECT_VERSION:-?} at ${WM_PROJECT_DIR:-?}"
 
+CONTINUE=0
+[ "${1:-}" = "--continue" ] && CONTINUE=1   # restart the solver from the latest time; keep mesh and results
+
 run() {  # run <log-name> <command...>
     local log="log.$1"; shift
     echo "[nuagent] $*"
-    "$@" > "$log" 2>&1
+    if [ $CONTINUE -eq 1 ] && [ -f "$log" ]; then
+        { echo; echo "// ---- nuagent: continued run ----"; } >> "$log"
+        "$@" >> "$log" 2>&1
+    else
+        "$@" > "$log" 2>&1
+    fi
     local rc=$?
     if [ $rc -ne 0 ]; then echo "[nuagent] FAILED ($rc): see $log" >&2; exit $rc; fi
 }
 
-rm -rf processor* postProcessing log.* [1-9]* 0.[0-9]* 2>/dev/null
-
-run blockMesh blockMesh
-run checkMesh checkMesh -allGeometry -allTopology
+if [ $CONTINUE -eq 0 ]; then
+    rm -rf processor* postProcessing log.* [1-9]* 0.[0-9]* 2>/dev/null
+    run blockMesh blockMesh
+    run checkMesh checkMesh -allGeometry -allTopology
+else
+    echo "[nuagent] continuing from the latest time directory"
+fi
 {% if n_procs > 1 %}
 run decomposePar decomposePar -force
 run {{ application }} mpirun --oversubscribe -np {{ n_procs }} {{ application }} -parallel

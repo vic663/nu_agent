@@ -8,14 +8,21 @@ from pathlib import Path
 from typing import Any
 
 from nuagent.physics import analytical, correlations
-from nuagent.spec import HeatedPipeCase, PermeationCase, ReferenceSpec, SimulationSpec, TDSCase
+from nuagent.spec import (
+    HeatedPipeCase,
+    PermeationCase,
+    ReferenceSpec,
+    RibbedTubeCase,
+    SimulationSpec,
+    TDSCase,
+)
 
 
 def analytical_reference(spec: SimulationSpec, quantity: str) -> tuple[float, str] | None:
     """Exact reference values where they exist."""
     case = spec.case
     if isinstance(case, HeatedPipeCase):
-        if case.regime.value != "laminar":
+        if case.regime.value != "laminar" or isinstance(case, RibbedTubeCase):
             return None
         if quantity == "Nu":
             return (
@@ -92,7 +99,15 @@ def reference_for(spec: SimulationSpec, ref: ReferenceSpec) -> dict[str, Any]:
     case = spec.case
     if not isinstance(case, HeatedPipeCase):
         raise KeyError(f"correlation {ref.source!r} only applies to pipe-flow cases")
-    cv = correlations.reference_value(ref.quantity, ref.source, case.reynolds, case.fluid.pr)
+    geometry = {}
+    if isinstance(case, RibbedTubeCase):
+        geometry = {
+            "e_over_D": case.rib_height_over_diameter,
+            "p_over_e": case.rib_pitch_over_height,
+        }
+    cv = correlations.reference_value(
+        ref.quantity, ref.source, case.reynolds, case.fluid.pr, **geometry
+    )
     return {
         "value": cv.value,
         "uncertainty": cv.uncertainty,

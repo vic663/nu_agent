@@ -291,25 +291,129 @@ def entry_length_thermal(reynolds_number: float, prandtl_number: float, diameter
     return 10.0 * diameter
 
 
+# --------------------------------------------------------------------------- #
+# Rib-roughened tubes (turbine-blade internal cooling, enhanced heat exchangers)
+# --------------------------------------------------------------------------- #
+
+
+@dataclass(frozen=True)
+class RibbedTubeCorrelation:
+    """Webb–Eckert–Goldstein (1971) repeated-rib roughness result set.
+
+    Roughness-function framework (Nikuradse / Dipprey–Sabersky):
+
+        R(e+) = sqrt(2/f_F) + 2.5 ln(2e/D) + 3.75          momentum roughness function
+        G(e+) = (f_F/(2 St) - 1) / sqrt(f_F/2) + R(e+)       heat-transfer roughness function
+        e+    = (e/D) Re sqrt(f_F/2)                         roughness Reynolds number
+
+    with the empirical fits for transverse repeated ribs
+
+        R(e+) = 0.95 (p/e)^0.53              (e+ > 35, 10 <= p/e <= 40)
+        G(e+) = 4.50 (e+)^0.28 Pr^0.57       (e+ > 25, 0.71 <= Pr <= 37.6)
+
+    ``f_F`` is the Fanning friction factor; the Darcy value is 4 f_F.  Han (1988) uses the same
+    framework for rib-roughened rectangular channels (turbine-blade cooling passages).
+    """
+
+    friction_darcy: float
+    nusselt: float
+    e_plus: float
+    roughness_function_R: float
+    heat_roughness_function_G: float
+    stanton: float
+    valid: bool
+    notes: str
+
+
+def webb_ribbed_tube(
+    reynolds_number: float, prandtl_number: float, e_over_D: float, p_over_e: float
+) -> RibbedTubeCorrelation:
+    """Friction factor and Nusselt number of a tube with transverse repeated ribs (Webb et al. 1971)."""
+    R = 0.95 * p_over_e**0.53
+    # sqrt(2/f) = R - 2.5 ln(2e/D) - 3.75   ->  closed form for the fully rough regime
+    root = R - 2.5 * math.log(2.0 * e_over_D) - 3.75
+    if root <= 0:  # pragma: no cover - only for absurd roughness inputs
+        raise ValueError("rib roughness outside the range of the Webb correlation")
+    f_fanning = 2.0 / root**2
+    e_plus = e_over_D * reynolds_number * math.sqrt(f_fanning / 2.0)
+    G = 4.50 * e_plus**0.28 * prandtl_number**0.57
+    stanton = (f_fanning / 2.0) / (1.0 + math.sqrt(f_fanning / 2.0) * (G - R))
+    nusselt_value = stanton * reynolds_number * prandtl_number
+    valid = (
+        e_plus > 35.0
+        and 10.0 <= p_over_e <= 40.0
+        and 0.01 <= e_over_D <= 0.04
+        and 0.71 <= prandtl_number <= 37.6
+    )
+    notes = (
+        f"e+={e_plus:.0f}, R={R:.2f}, G={G:.2f}; "
+        + ("inside" if valid else "outside")
+        + " the correlation's stated range (e+>35, 10<=p/e<=40, 0.01<=e/D<=0.04, 0.71<=Pr<=37.6)"
+    )
+    return RibbedTubeCorrelation(
+        4.0 * f_fanning, nusselt_value, e_plus, R, G, stanton, valid, notes
+    )
+
+
+def ribbed_tube_friction(
+    reynolds_number: float, prandtl_number: float, e_over_D: float, p_over_e: float
+) -> CorrelationValue:
+    """Darcy friction factor of a rib-roughened tube (Webb 1971); representative uncertainty ±10 %."""
+    r = webb_ribbed_tube(reynolds_number, prandtl_number, e_over_D, p_over_e)
+    return CorrelationValue(
+        r.friction_darcy,
+        "webb",
+        uncertainty=0.10,
+        valid=r.valid,
+        notes=r.notes,
+        inputs={"Re": reynolds_number, "e/D": e_over_D, "p/e": p_over_e},
+    )
+
+
+def ribbed_tube_nusselt(
+    reynolds_number: float, prandtl_number: float, e_over_D: float, p_over_e: float
+) -> CorrelationValue:
+    """Nominal-area Nusselt number of a rib-roughened tube (Webb 1971); representative uncertainty ±15 %."""
+    r = webb_ribbed_tube(reynolds_number, prandtl_number, e_over_D, p_over_e)
+    return CorrelationValue(
+        r.nusselt,
+        "webb",
+        uncertainty=0.15,
+        valid=r.valid,
+        notes=r.notes,
+        inputs={"Re": reynolds_number, "Pr": prandtl_number, "e/D": e_over_D, "p/e": p_over_e},
+    )
+
+
+def thermal_performance_factor(nu_ratio: float, f_ratio: float) -> float:
+    """Constant-pumping-power performance criterion (Webb & Eckert 1972): (Nu/Nu0) / (f/f0)^(1/3)."""
+    return nu_ratio / f_ratio ** (1.0 / 3.0)
+
+
 # Registry used by the validation node ------------------------------------- #
 
 REFERENCE_REGISTRY = {
-    ("Nu", "laminar"): lambda Re, Pr: nusselt_laminar(),
-    ("Nu", "gnielinski"): nusselt_gnielinski,
-    ("Nu", "dittus_boelter"): nusselt_dittus_boelter,
-    ("Nu", "petukhov"): nusselt_petukhov,
-    ("f", "laminar"): lambda Re, Pr: friction_factor_laminar(Re),
-    ("f", "blasius"): lambda Re, Pr: friction_factor_blasius(Re),
-    ("f", "petukhov"): lambda Re, Pr: friction_factor_petukhov(Re),
-    ("f", "prandtl_karman"): lambda Re, Pr: friction_factor_prandtl_karman(Re),
+    ("Nu", "laminar"): lambda Re, Pr, **g: nusselt_laminar(),
+    ("Nu", "gnielinski"): lambda Re, Pr, **g: nusselt_gnielinski(Re, Pr),
+    ("Nu", "dittus_boelter"): lambda Re, Pr, **g: nusselt_dittus_boelter(Re, Pr),
+    ("Nu", "petukhov"): lambda Re, Pr, **g: nusselt_petukhov(Re, Pr),
+    ("Nu", "webb"): lambda Re, Pr, **g: ribbed_tube_nusselt(Re, Pr, g["e_over_D"], g["p_over_e"]),
+    ("f", "laminar"): lambda Re, Pr, **g: friction_factor_laminar(Re),
+    ("f", "blasius"): lambda Re, Pr, **g: friction_factor_blasius(Re),
+    ("f", "petukhov"): lambda Re, Pr, **g: friction_factor_petukhov(Re),
+    ("f", "prandtl_karman"): lambda Re, Pr, **g: friction_factor_prandtl_karman(Re),
+    ("f", "webb"): lambda Re, Pr, **g: ribbed_tube_friction(Re, Pr, g["e_over_D"], g["p_over_e"]),
 }
 
 
 def reference_value(
-    quantity: str, source: str, reynolds_number: float, prandtl_number: float
+    quantity: str, source: str, reynolds_number: float, prandtl_number: float, **geometry
 ) -> CorrelationValue:
-    """Look up a reference correlation by (quantity, source)."""
+    """Look up a reference correlation by (quantity, source); ``geometry`` carries e.g. e_over_D, p_over_e."""
     key = (quantity, source)
     if key not in REFERENCE_REGISTRY:
         raise KeyError(f"no reference for {key}; available: {sorted(REFERENCE_REGISTRY)}")
-    return REFERENCE_REGISTRY[key](reynolds_number, prandtl_number)
+    try:
+        return REFERENCE_REGISTRY[key](reynolds_number, prandtl_number, **geometry)
+    except KeyError as exc:
+        raise KeyError(f"reference {key} needs geometry parameter {exc}") from exc

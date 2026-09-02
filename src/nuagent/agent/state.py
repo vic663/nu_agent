@@ -21,6 +21,7 @@ class AgentState(TypedDict, total=False):
     # execution bookkeeping
     attempt: int
     adjustments: dict[str, Any]
+    continue_case: bool  # extend the previous case from its latest time instead of rebuilding
     case: dict[str, Any]  # CaseHandle.to_dict()
     run: dict[str, Any]  # RunResult.to_dict()
     convergence: dict[str, Any]  # ConvergenceReport.to_dict()

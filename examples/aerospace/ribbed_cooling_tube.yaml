@@ -1,0 +1,53 @@
+# Turbine-blade internal cooling passage analogue: air in a 20 mm tube with 12 transverse square
+# ribs (e/D = 0.04, p/e = 10), Re = 20 000, wall-resolved low-Re k-epsilon (Launder-Sharma).
+# Validated against the Webb-Eckert-Goldstein (1971) rib-roughness correlations; the smooth-tube
+# values give the enhancement ratios Nu/Nu0, f/f0 and the thermal-performance factor used in
+# cooling design.  Closure choice: k-omega SST predicts a single recirculation spanning the whole
+# inter-rib gap (d-type behaviour, f and Nu ~50-60 % low); the k-epsilon family reattaches at
+# 4-5 e as experiments do — see docs/case_catalogue.md for the model comparison.
+# ~15 min on one core for the fine grid plus the two coarser levels of the grid study.
+name: ribbed-tube-air-Re20k
+description: >
+  Rib-roughened cooling tube (turbulators): air at 300 K, Re = 20 000, square ribs e/D = 0.04 at p/e = 10,
+  1 kW/m2 wall heat flux. Module-averaged Nusselt number and friction factor over the periodic fully
+  developed pitches are validated against Webb et al. (1971); enhancement over the smooth tube is reported.
+backend: openfoam
+case:
+  kind: ribbed_tube
+  fluid: {name: air_300K, rho: 1.16, mu: 1.85e-5, cp: 1007.0, k: 0.0263, mol_weight: 28.96}
+  diameter: 0.02
+  reynolds: 20000
+  inlet_temperature: 300.0
+  wall_heat_flux: 1000.0
+  turbulence_model: LaunderSharmaKE
+  wall_treatment: resolved
+  rib_height_over_diameter: 0.04
+  rib_pitch_over_height: 10.0
+  rib_width_over_height: 1.0
+  n_ribs: 12
+  inlet_length_over_diameter: 5.0
+  outlet_length_over_diameter: 2.0
+  developed_modules: 4
+  mesh:
+    n_radial: 36
+    n_radial_rib: 16
+    cells_per_rib_height: 10
+    cells_per_diameter: 10
+    target_yplus: 1.0
+  numerics:
+    max_iterations: 6000
+    residual_target: 1.0e-5
+    write_interval: 1000
+verification:
+  mesh_study: true
+  refinement_ratio: 1.4   # coarser levels keep >= 5 cells across a rib
+  n_levels: 3
+validation:
+  references:
+    - {quantity: Nu, source: webb, tolerance: 0.25}   # RANS is known to under-predict Nu in separated regions
+    - {quantity: f, source: webb, tolerance: 0.15}
+execution:
+  executor: local
+  n_procs: 1
+  max_attempts: 3
+  wallclock_minutes: 90

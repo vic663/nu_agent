@@ -36,7 +36,7 @@ that loop, but a national-laboratory environment asks a harder question than "ca
 
 Each layer can be used without the ones above it: `physics` and `verification` are plain functions,
 `backends` build cases that can be run by hand, `executors` run any `Allrun`, and the agent is a thin
-orchestration on top. This is what makes the system testable (72 unit tests run in 45 s with no solver).
+orchestration on top. This is what makes the system testable (80 tests, of which 77 run in under a minute with no solver).
 
 ## 3. The specification as contract
 
@@ -75,7 +75,7 @@ state written by deterministic nodes.
 | `approve` | human | `interrupt()` before expensive/HPC runs when `require_approval` |
 | `run` | yes | executor runs `Allrun`; local executor polls the log and can stop a converged run early |
 | `monitor` | yes | parses residuals, continuity, bounding, fatal errors → `converged / stalled / diverged` |
-| `diagnose` | rules: yes / LLM: no | proposes **bounded** numerics changes; gives up when the table is exhausted or attempts run out |
+| `diagnose` | rules: yes / LLM: no | proposes **bounded** numerics changes; decides whether to *continue* the case or rebuild; gives up when the table is exhausted or attempts run out |
 | `postprocess` | yes | QoIs from raw fields (Nu, f, ΔT, balances) or `results.csv` |
 | `verify` | yes | builds and runs coarser levels, Richardson extrapolation, GCI, exact-solution error |
 | `validate` | yes | references from correlations (with uncertainty), analytical solutions or datasets |
@@ -96,6 +96,23 @@ state written by deterministic nodes.
   logged in the decision log.
 * **Provenance.** Git commit, package and solver versions, spec hash, input digests, attempts, adjustments
   and the full decision log are written with every report.
+
+### Continue, don't restart
+
+A run that completes cleanly but misses the residual target is *continued*: the diagnostician's
+numerics changes are re-rendered into the existing case, `startFrom latestTime` is set and
+`Allrun --continue` skips meshing, so hours of HPC work are never discarded. Only a diverged run is
+rebuilt from scratch. Cases are also idempotent — re-invoking the workflow on a directory whose case was
+built from the identical specification reuses the results instead of re-running the solver.
+
+### Physics-aware critique (model-form failure detection)
+
+The critique node checks quantities a turbulence modeller would look at, not only residuals: for the
+rib-roughened tube it computes the reversed-flow fraction of the inter-rib gap and the reattachment
+location from the wall-adjacent velocity. A converged k-ω SST solution with a single recirculation
+filling the gap (d-type cavity flow where p/e = 10 should give k-type reattachment at 4–5 e) is flagged
+and a k-ε family closure is recommended — see `docs/case_catalogue.md` §D1 for the measured effect
+(f from −55 % to −4 % of Webb's correlation).
 
 ### Convergence criterion (an example of "physics-aware" automation)
 

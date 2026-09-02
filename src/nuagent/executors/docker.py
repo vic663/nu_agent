@@ -40,23 +40,29 @@ class DockerExecutor:
     def available(self) -> bool:
         return shutil.which(self.docker_bin) is not None
 
-    def command(self, case: CaseHandle, execution: ExecutionSpec) -> list[str]:
+    def command(
+        self, case: CaseHandle, execution: ExecutionSpec, args: tuple[str, ...] = ()
+    ) -> list[str]:
         image = execution.docker_image or self.images[case.backend]
         cmd = [self.docker_bin, "run", "--rm", "-v", f"{case.path.resolve()}:/case", "-w", "/case"]
         if self.user_mapping and hasattr(os, "getuid"):
             cmd += ["--user", f"{os.getuid()}:{os.getgid()}"]
         if case.backend == "openfoam":
             # the official image's entrypoint sources the OpenFOAM environment before running the command
-            cmd += [image, "./Allrun"]
+            cmd += [image, "./Allrun", *args]
         else:
-            cmd += [image, "bash", "./Allrun"]
+            cmd += [image, "bash", "./Allrun", *args]
         return cmd
 
     def run(
-        self, case: CaseHandle, execution: ExecutionSpec, timeout_s: float | None = None
+        self,
+        case: CaseHandle,
+        execution: ExecutionSpec,
+        timeout_s: float | None = None,
+        args: tuple[str, ...] = (),
     ) -> RunResult:
         timeout_s = timeout_s or execution.wallclock_minutes * 60.0
-        cmd = self.command(case, execution)
+        cmd = self.command(case, execution, args)
         out_path = case.path / "allrun.out"
         t0 = time.time()
         timed_out = False

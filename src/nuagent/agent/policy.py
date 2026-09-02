@@ -157,6 +157,18 @@ def rules_critique(spec: SimulationSpec, results: dict[str, Any]) -> Critique:
         nu = values.get("Nu")
         if nu is not None and (not math.isfinite(nu) or nu <= 0):
             warnings.append("non-physical Nusselt number")
+    if spec.case.kind == "ribbed_tube":
+        frac = checks.get("reversed_flow_fraction_of_gap")
+        reattach = checks.get("reattachment_x_over_e")
+        if frac is not None and frac > 0.8 and spec.case.rib_pitch_over_height >= 6:
+            warnings.append(
+                f"no reattachment between ribs (reversed flow over {frac * 100:.0f} % of the gap): "
+                f"p/e = {spec.case.rib_pitch_over_height:g} should give k-type roughness with reattachment at "
+                f"~4-5 e; the closure ({spec.case.turbulence_model.value}) is probably over-predicting the "
+                "separation bubble — compare with a k-epsilon family model"
+            )
+        elif reattach is not None and math.isfinite(reattach) and reattach > 0:
+            pass  # attached region present: consistent with k-type roughness
     for q, v in results.get("verification", {}).get("gci", {}).items():
         if v.get("convergence") in ("oscillatory", "divergent"):
             warnings.append(f"grid convergence for {q} is {v['convergence']}")

@@ -29,9 +29,13 @@ class Executor(Protocol):
     name: str
 
     def run(
-        self, case: CaseHandle, execution: ExecutionSpec, timeout_s: float | None = None
+        self,
+        case: CaseHandle,
+        execution: ExecutionSpec,
+        timeout_s: float | None = None,
+        args: tuple[str, ...] = (),
     ) -> RunResult:
-        """Run ``case.allrun`` to completion (blocking) and return the result."""
+        """Run ``case.allrun`` (optionally with arguments such as ``--continue``) and return the result."""
         ...
 
 

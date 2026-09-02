@@ -12,6 +12,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ planned
 - ✅ GCI verification, correlation/analytical validation with uncertainty bands
 - ✅ Bayesian calibration (emcee, GP surrogate) and Sobol UQ
 - ✅ Markdown report, provenance, decision log; CLI; eval harness; Docker; CI
+- ✅ Rib-roughened cooling tube (aerospace / AGR-cladding physics) with model-form diagnostics; continue-from-latest-time and idempotent case reuse
 
 ## Week 1 — harden and publish
 
@@ -21,7 +22,7 @@ Status legend: ✅ done · 🔄 in progress · ⏳ planned
 | ⏳ FESTIM end-to-end in the container | A3/A4 reports; fix API details surfaced by the real run | `docker compose run festim nuagent run examples/tritium_permeation/permeation_verification.yaml` |
 | ⏳ LLM policy smoke test | `nuagent ask … --plan-only` with Claude and with a local model (Ollama/vLLM via `OPENAI_BASE_URL`) | record plan-grade scores in `evals/` |
 | ⏳ Turbulent case refinement | L/D = 60, `cells_per_diameter` 15, wall-function variant; compare SST vs k-ε | expect Nu closer to Gnielinski; document model-form spread |
-| ⏳ Rib-roughened channel template (D1) | 2-D periodic ribbed channel, validation vs Han (1988) and Rau et al. | PI's own thermography data as a second reference |
+| ✅ Rib-roughened cooling tube (D1) | multi-block axisymmetric template, Webb (1971) validation, turbulence-model comparison, reattachment diagnostic | next: sweep e/D and Re; add PI's thermography data as a second reference; LES reference case |
 | ⏳ MCP server | expose `build_case`, `run_case`, `extract_qois`, `validate` as MCP tools so any agent client (Claude Code, etc.) can drive the workflow | `nuagent mcp` (FastMCP) |
 
 ## Week 2 — multiphysics and calibration

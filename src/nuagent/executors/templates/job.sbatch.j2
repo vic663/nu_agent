@@ -19,7 +19,7 @@ set -o pipefail
 export OMP_NUM_THREADS=1
 cd "{{ case_dir }}" || exit 1
 echo "[nuagent] SLURM job $SLURM_JOB_ID on $(hostname) with $SLURM_NTASKS tasks"
-bash ./Allrun
+bash ./Allrun {{ run_args }}
 rc=$?
 echo "[nuagent] Allrun exit code: $rc"
 echo "$rc" > "{{ case_dir }}/.nuagent_exit_code"

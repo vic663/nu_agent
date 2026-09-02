@@ -50,7 +50,11 @@ class LocalExecutor:
         self.env = env
 
     def run(
-        self, case: CaseHandle, execution: ExecutionSpec, timeout_s: float | None = None
+        self,
+        case: CaseHandle,
+        execution: ExecutionSpec,
+        timeout_s: float | None = None,
+        args: tuple[str, ...] = (),
     ) -> RunResult:
         timeout_s = timeout_s or execution.wallclock_minutes * 60.0
         out_path = case.path / "allrun.out"
@@ -59,7 +63,7 @@ class LocalExecutor:
         t0 = time.time()
         with open(out_path, "w") as out:
             proc = subprocess.Popen(
-                ["bash", str(case.allrun)],
+                ["bash", str(case.allrun), *args],
                 cwd=case.path,
                 stdout=out,
                 stderr=subprocess.STDOUT,

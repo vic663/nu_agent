@@ -1,7 +1,8 @@
 # NuAgent
 
 **An agentic workflow that sets up, runs, monitors, verifies, validates and calibrates
-thermal-hydraulics (OpenFOAM) and tritium-transport (FESTIM) simulations — and writes the V&V report.**
+thermal-fluids simulations — OpenFOAM heat transfer for reactor coolant channels and turbine-blade
+cooling passages, FESTIM tritium transport for fusion — and writes the V&V report.**
 
 [![CI](https://github.com/<your-github-user>/nuagent/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-github-user>/nuagent/actions)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green)
@@ -26,7 +27,9 @@ LLM's contribution can be measured rather than assumed.
 | Capability | Status |
 |---|---|
 | Typed simulation specs (Pydantic) as the only interface between LLM and solvers | ✅ |
-| OpenFOAM backend: axisymmetric heated pipe, laminar & k-ω SST, template-generated, y⁺-targeted meshing | ✅ tested on OpenFOAM v1912, targets v2312–v2512 |
+| OpenFOAM backend: axisymmetric heated pipe, laminar & RANS (k-ω SST, k-ε family), template-generated, y⁺-targeted meshing | ✅ tested on OpenFOAM v1912, targets v2312–v2512 |
+| **Rib-roughened cooling tube** (turbine-blade turbulator / AGR cladding analogue): multi-block mesh, module-averaged Nu & f, Webb–Eckert–Goldstein validation, reattachment diagnostic | ✅ real runs; SST model-form failure detected automatically |
+| Continue-from-latest-time for stalled runs, idempotent case reuse | ✅ |
 | FESTIM 2.x backend: 1-D tritium permeation (with McNabb–Foster traps) and TDS | ✅ generated & post-processed; solver run in the FESTIM container |
 | Mock backend with controlled discretisation error for CI and agent evals | ✅ |
 | Live convergence monitor (stops OpenFOAM early once *physically meaningful* residuals converge) | ✅ |
@@ -37,7 +40,7 @@ LLM's contribution can be measured rather than assumed.
 | Sobol sensitivity analysis (SALib) | ✅ |
 | Markdown report with plots, decision log and provenance (git hash, versions, digests) | ✅ |
 | Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ |
-| Agent qualification suite (`nuagent eval`) | ✅ 5 tasks |
+| Agent qualification suite (`nuagent eval`) | ✅ 6 tasks, 100 % success / 100 % validated on the mock backend |
 | LLM planning from natural language (`nuagent ask`) — Anthropic, OpenAI, or any OpenAI-compatible local server | ✅ |
 
 ### Results so far (real OpenFOAM runs, single core)
@@ -48,13 +51,23 @@ LLM's contribution can be measured rather than assumed.
 | Laminar pipe, Re = 200 | f | 0.3203 | 64/Re = 0.3200 (exact) | **+0.1 %** | p = 1.92, GCI 0.15 % |
 | Turbulent pipe, Re = 20 000, water, k-ω SST (y⁺≈1) | Nu | 124.6 | Gnielinski 137.8 (±10 %) / Dittus–Boelter 128.4 (±25 %) | −9.6 % / −3.0 % | GCI < 0.1 % |
 | Turbulent pipe, Re = 20 000 | f | 0.02416 | Petukhov 0.02615 (±5 %) | −7.6 % | GCI 0.9 % |
+| **Rib-roughened tube**, air, Re = 20 000, e/D = 0.04, p/e = 10, low-Re k-ε | Nu (nominal area) | 112.9 (Nu/Nu₀ = 2.18) | Webb et al. 1971: 141.9 (±15 %) | −20.4 % (−13 % with base-temperature definition) | p = 2.1, GCI 2.5 % |
+| Rib-roughened tube | f | 0.2313 (f/f₀ = 8.85) | Webb et al. 1971: 0.2392 (±10 %) | **−3.3 %** | not asymptotic (p = 0.25; 2.4 % change between the two finest grids) |
 
-Energy-balance closure 0.06–0.1 %, mass-balance closure 0.13 % (wedge chord approximation), friction factor from
+Energy-balance closure 0.06–0.1 % (smooth pipes) and 3 % (ribbed tube), mass-balance closure 0.13 %, friction factor from
 d*p*/d*x* and from wall shear agree within 2 %. Full reports with figures: [`docs/examples/`](docs/examples/).
 
 The turbulent Nusselt number sits inside the correlations' stated uncertainty and shows the well-known
 5–10 % under-prediction of wall-resolved SST with Pr_t = 0.85 — which is exactly the kind of model-form
 uncertainty the calibration module is designed to quantify next (roadmap week 2).
+
+**The ribbed tube is where the workflow earns its keep.** With the default k-ω SST closure the run
+converges cleanly but predicts a single recirculation filling the whole inter-rib gap (d-type cavity flow),
+giving f 55 % and Nu 65 % below Webb's correlation; the physics-aware critique flags "no reattachment
+between ribs" and recommends the k-ε family, which reattaches at 4–5 e as experiments do and brings f
+within 4 % — leaving the well-documented RANS heat-transfer deficit in separated regions (see
+[`docs/case_catalogue.md`](docs/case_catalogue.md) §D1 for the five-model comparison). An
+execution-success metric would have reported the SST run as a success.
 
 ## Quick start
 
@@ -140,6 +153,7 @@ docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
 - [Design and architecture](docs/design.md) — state machine, guardrails, qualification strategy
 - [Case catalogue](docs/case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)
 - [Roadmap](docs/roadmap.md) — 3-week plan: coupled CFD→tritium permeation, MHD duct, ribbed channel, HPC
+- [Literature review and scientific positioning](docs/literature_review.md) — where the field is, the gap, the story
 - [Publication plan](docs/publication_plan.md) — research questions and experiment matrix
 - [Example reports](docs/examples/) — generated by the workflow from real OpenFOAM runs
 

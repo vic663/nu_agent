@@ -1,4 +1,4 @@
-{% set field_class = "volScalarField" %}{% set field_name = "p_rgh" %}{% include "0/_header.j2" %}
+{% set field_class = "volScalarField" %}{% set field_name = "p_rgh" %}{% include "heated_pipe/0/_header.j2" %}
 
 dimensions      [1 -1 -2 0 0 0 0];
 
@@ -21,7 +21,7 @@ boundaryField
         type            fixedFluxPressure;
         value           $internalField;
     }
-{% include "0/_wedge.j2" %}
+{% include "heated_pipe/0/_wedge.j2" %}
 }
 
 // ************************************************************************* //

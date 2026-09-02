@@ -37,10 +37,41 @@ Legend: ✅ implemented · 🔧 designed, in roadmap · 💡 candidate
 
 ## D. Application cases — aerospace (transferable heat transfer, PI's background)
 
-| # | Case | Why it matters | Reference | Design sketch | Status |
-|---|---|---|---|---|---|
-| D1 | **Rib-roughened cooling channel** (e/D_h ≈ 0.1, p/e = 10) | turbine-blade internal cooling; heat-transfer vs friction trade-off | Han (1988) rib-roughness functions R(e⁺), G(e⁺); Rau et al. (1998); liquid-crystal thermography data (Taslim & Ren, 2016) | 2-D periodic ribbed channel, k-ω SST, `blockMesh` multi-block; QoIs: Nu/Nu₀, f/f₀, thermal performance (Nu/Nu₀)/(f/f₀)^{1/3} | 🔧 week 1–2 |
-| D2 | **Impinging jet (anti-ice piccolo tube)** | wing anti-ice; the PI validated this at Bombardier against NASA data | Martin (1977), Goldstein & Behbahani (1982) stagnation Nu correlations; ERCOFTAC/NASA impinging-jet data | axisymmetric jet onto a plate (H/D 2–8), k-ω SST / v²-f; QoIs: stagnation Nu, radial Nu(r) | 🔧 week 3 |
+| # | Case | Why it matters | Reference | Status |
+|---|---|---|---|---|
+| D1 | **Rib-roughened cooling tube** (transverse square ribs, e/D = 0.04, p/e = 10, air, Re = 2×10⁴) | turbine-blade internal cooling and enhanced heat-exchanger tubes; the *same* rib turbulators are used on UK AGR fuel cladding | Webb, Eckert & Goldstein (1971) roughness functions R(e⁺), G(e⁺); Han (1988) for channels; Rau et al. (1998) | ✅ implemented, validated — see below |
+| D2 | **Impinging jet (anti-ice piccolo tube)** | wing anti-ice; the PI validated this at Bombardier against NASA data | Martin (1977), Goldstein & Behbahani (1982); ERCOFTAC/NASA impinging-jet data | 🔧 week 3 — axisymmetric jet onto a heated plate (H/D 2–8); QoIs: stagnation Nu, radial Nu(r) |
+
+### D1 results — turbulence-model comparison (real OpenFOAM runs, 6-rib development case, 13.5k cells)
+
+The ribbed tube is where the workflow earns its keep: the *default* closure fails validation and the
+diagnostics say why.
+
+| Closure | Reattachment behind rib | f vs Webb | Nu vs Webb (wetted-area T) | Nu vs Webb (base T) |
+|---|---|---|---|---|
+| k-ω SST, wall-resolved (y⁺≈1) | **none** — one recirculation fills the whole gap (d-type) | −55 % | −66 % | −63 % |
+| k-ω SST, wall functions | none | −47 % | −64 % | −63 % |
+| standard k-ε, wall functions | 5.0 e | −11 % | −33 % | −28 % |
+| realizable k-ε, wall functions | 4.5 e | −15 % | −48 % | −45 % |
+| **Launder–Sharma low-Re k-ε, wall-resolved** | **4.0 e** | **−4 %** | −31 % | −25 % |
+
+Experiments (Rau et al. 1998; Webb 1971) show k-type roughness for p/e = 10: reattachment at ≈4–5 e,
+then a high-heat-transfer recovery region. The k-ω SST family predicts a cavity ("d-type") flow for this
+geometry and therefore misses both the form drag and the enhancement; the ε-family recovers the flow
+topology and the friction factor, while the remaining ≈25–30 % Nusselt deficit is the well-documented
+RANS under-prediction of heat transfer in separated/reattaching regions (Iacovides & Raisee 1999 —
+cured there by the Yap length-scale correction, not available in OpenFOAM's `LaunderSharmaKE`).
+The critique node now flags "no reattachment between ribs" automatically and recommends the ε-family.
+
+**Final 12-rib case** (`examples/aerospace/ribbed_cooling_tube.yaml`, Launder–Sharma, 37k cells, 10 cells across a rib,
+three grids at ratio 1.4): Nu = 112.9 (−20.4 % vs Webb, −13 % with the base-temperature definition; Nu/Nu₀ = 2.18;
+observed order 2.1, GCI 2.5 %), f = 0.2313 (−3.3 % vs Webb; f/f₀ = 8.85; still 2.4 % grid-dependent between the two
+finest grids, so its GCI is not asymptotic), reattachment at 3.3 e, thermal-performance factor 1.06. Both quantities
+pass their acceptance tolerances (25 % / 15 %); the report flags the remaining energy-balance closure (3 %) and the
+non-asymptotic friction-factor grid study — the workflow does not rubber-stamp.
+The nuclear connection is direct: rib-roughened fuel-pin cladding in Advanced Gas-cooled Reactors uses
+exactly this heat-transfer mechanism, and the same RANS deficits are reported in AGR channel studies
+(Keshmiri et al., Manchester).
 
 Every application case plugs in through the same three artefacts: a `CaseSpec` model, a template set (or
 FESTIM builder), and reference entries in the registry. The agent, the executors, the V&V machinery and
@@ -52,7 +83,10 @@ the reporting do not change.
 - Gnielinski, V. (1976). *Int. Chem. Eng.* 16, 359–368.  Petukhov, B.S. (1970). *Adv. Heat Transfer* 6.
 - Crank, J. (1975). *The Mathematics of Diffusion*, 2nd ed.  Oriani, R.A. (1970). *Acta Metall.* 18, 147.
 - Redhead, P.A. (1962). *Vacuum* 12, 203.  Müller, U., Bühler, L. (2001). *Magnetofluiddynamics in Channels and Containers*.
+- Webb, R.L., Eckert, E.R.G., Goldstein, R.J. (1971). *Int. J. Heat Mass Transfer* 14, 601–617.
 - Han, J.C. (1988). *J. Heat Transfer* 110, 321–328.  Rau, G. et al. (1998). *J. Turbomach.* 120, 368–375.
+- Iacovides, H., Raisee, M. (1999). *Int. J. Heat Fluid Flow* 20, 320–328 (low-Re k-ε with Yap correction for ribbed passages).
+- Keshmiri, A., Cotton, M.A., Addad, Y., Laurence, D. (2012). *Flow Turbul. Combust.* 89 (RANS/LES of rib-roughened AGR channels).
 - Taslim, M.E., Ren, B. (2016). ISROMAC 2016, paper 44042.  Martin, H. (1977). *Adv. Heat Transfer* 13.
 - Trupp, A.C., Azad, R.S. (1975). *Nucl. Eng. Des.* 32, 47–84.  Rehme, K. (1973). *Int. J. Heat Mass Transfer* 16, 933.
 - Delaporte-Mathurin, R. et al. (2024). FESTIM: an open-source code for hydrogen transport simulations. *Int. J. Hydrogen Energy*.

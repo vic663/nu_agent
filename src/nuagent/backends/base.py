@@ -113,7 +113,14 @@ class SolverBackend(Protocol):
 
 
 def spec_hash(spec: SimulationSpec, extra: dict[str, Any] | None = None) -> str:
-    payload = spec.model_dump(mode="json")
+    """Hash of everything that determines the solver input files (case physics/numerics, backend,
+    parallel decomposition) — *not* the V&V or reporting settings, so a case can be reused when only
+    the verification/validation plan changes."""
+    payload = {
+        "backend": spec.backend.value,
+        "case": spec.case.model_dump(mode="json"),
+        "n_procs": spec.execution.n_procs,
+    }
     if extra:
         payload["_extra"] = extra
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
