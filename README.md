@@ -1,8 +1,10 @@
 # NuAgent
 
 **An agentic workflow that sets up, runs, monitors, verifies, validates and calibrates
-thermal-fluids simulations — OpenFOAM heat transfer for reactor coolant channels and turbine-blade
-cooling passages, FESTIM tritium transport for fusion — and writes the V&V report.**
+convective heat-transfer and transport simulations — turbine-blade cooling passages, heat-exchanger and
+reactor coolant channels (OpenFOAM), tritium transport in fusion materials (FESTIM) — and writes the
+V&V report.** The *Nu* is the Nusselt number, the quantity every case here is validated on (and ν, the
+kinematic viscosity); the physics is the same in an aircraft engine and in a reactor core.
 
 [![CI](https://github.com/<your-github-user>/nuagent/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-github-user>/nuagent/actions)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green)
@@ -101,6 +103,28 @@ nuagent ask "Turbulent water flow in a 20 mm pipe at Re=20000 with 50 kW/m2 heat
 # 6. qualify the agent: success rate, retries, validation and GCI outcomes over the task suite
 nuagent eval evals/tasks --backend mock --policy rules
 ```
+
+## LLM options and cost
+
+Everything shown above — every run, report, grid study, calibration and the qualification suite — was
+produced with the **rules policy, i.e. with zero LLM tokens**. The language model is optional and enters in
+exactly three places: planning a specification from natural language (`nuagent ask`), proposing numerics
+changes after a failed run, and adding remarks to the review. Each is a single structured-output call of
+roughly 5–15k tokens, so a full LLM-assisted run costs cents with a hosted model and nothing with a local
+one.
+
+| Option | Setting | Notes |
+|---|---|---|
+| No LLM (default) | `--policy rules` | deterministic, reproducible; what CI and the evals use |
+| Hosted, Anthropic | `pip install -e ".[anthropic]"`, `ANTHROPIC_API_KEY`, `NUAGENT_LLM_MODEL=anthropic:claude-sonnet-4-5` | structured output via tool calling |
+| Hosted, OpenAI | `pip install -e ".[openai]"`, `OPENAI_API_KEY`, `NUAGENT_LLM_MODEL=openai:gpt-4o` | |
+| **Local, Ollama** (free, on-premise) | `pip install -e ".[openai]"`, `ollama pull qwen2.5:14b`, `OPENAI_BASE_URL=http://localhost:11434/v1`, `NUAGENT_LLM_MODEL=openai:qwen2.5:14b` | any model that supports tool calling (Llama 3.1/3.2, Qwen 2.5, Mistral); 7–14B quantised models run on a laptop with 16 GB RAM or an 8 GB GPU |
+| Local, vLLM (cluster) | same as above with the vLLM server's `OPENAI_BASE_URL` | 70B-class open-weights models for the model-comparison study |
+| Local via `langchain-ollama` | `pip install -e ".[ollama]"`, `NUAGENT_LLM_MODEL=ollama:qwen2.5:14b` | alternative to the OpenAI-compatible route |
+
+Because the deterministic path is complete, the interesting scientific question — *what does the LLM add,
+and does an open-weights model on an air-gapped machine add as much as a frontier model?* — can be
+answered with `nuagent eval … --policy llm` at negligible cost.
 
 ## Why this design
 
