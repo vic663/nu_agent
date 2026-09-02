@@ -1,0 +1,19 @@
+# The mock solver diverges when relax_U > 0.8 on a turbulent case: the agent must diagnose and recover.
+task: >
+  Turbulent heated pipe at Re = 30000 (water, 20 mm, 30 kW/m2); the numerics were set aggressively
+  (momentum under-relaxation 0.9). Obtain a converged, validated solution.
+spec:
+  name: eval-diverging-recovery
+  backend: mock
+  case:
+    kind: heated_pipe
+    fluid: {name: water_300K, rho: 996.0, mu: 8.5e-4, cp: 4180.0, k: 0.61, mol_weight: 18.0}
+    diameter: 0.02
+    reynolds: 30000
+    wall_heat_flux: 3.0e4
+    turbulence_model: kOmegaSST
+    numerics: {relax_U: 0.9}
+  execution: {max_attempts: 3}
+expect:
+  qoi_ranges: {Nu: [150, 230]}
+  max_attempts: 2

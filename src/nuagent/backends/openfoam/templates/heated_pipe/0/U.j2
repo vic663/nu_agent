@@ -1,0 +1,27 @@
+{% set field_class = "volVectorField" %}{% set field_name = "U" %}{% include "0/_header.j2" %}
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform ({{ u_in }} 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform ({{ u_in }} 0 0);
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform (0 0 0);
+        value           $internalField;
+    }
+    wall
+    {
+        type            noSlip;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

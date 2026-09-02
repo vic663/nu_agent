@@ -1,0 +1,29 @@
+{% set field_class = "volScalarField" %}{% set field_name = "epsilon" %}{% include "0/_header.j2" %}
+
+dimensions      [0 2 -3 0 0 0 0];
+
+internalField   uniform {{ epsilon_in }};
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentMixingLengthDissipationRateInlet;
+        mixingLength    {{ mixing_length }};
+        value           $internalField;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
+    }
+    wall
+    {
+        type            epsilonWallFunction;
+        value           $internalField;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

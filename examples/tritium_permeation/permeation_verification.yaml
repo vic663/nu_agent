@@ -1,0 +1,21 @@
+# Tritium permeation through a 1 mm tungsten slab at 600 K (FESTIM).
+# Verification against the exact transient permeation solution (steady flux and time lag).
+name: tritium-permeation-W-600K
+description: >
+  Transient hydrogen-isotope permeation through a 1 mm tungsten membrane at 600 K with a fixed upstream
+  concentration; verifies FESTIM against the Crank series solution (J_ss = D c0 / L, t_lag = L^2 / 6D).
+backend: festim
+case:
+  kind: permeation
+  material: {name: tungsten, D_0: 4.1e-7, E_D: 0.39}
+  thickness: 1.0e-3
+  temperature: 600.0
+  upstream_concentration: 1.0e20
+  n_cells: 200
+  n_steps: 400
+verification: {mesh_study: true, refinement_ratio: 2.0, n_levels: 3}
+validation:
+  references:
+    - {quantity: permeation_flux_ss, source: analytical, tolerance: 0.02}
+    - {quantity: time_lag, source: analytical, tolerance: 0.05}
+execution: {executor: local, max_attempts: 2, wallclock_minutes: 30}

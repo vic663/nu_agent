@@ -1,0 +1,27 @@
+{% set field_class = "volScalarField" %}{% set field_name = "p" %}{% include "0/_header.j2" %}
+
+dimensions      [1 -1 -2 0 0 0 0];
+
+internalField   uniform {{ p_ref }};
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           $internalField;
+    }
+    outlet
+    {
+        type            calculated;
+        value           $internalField;
+    }
+    wall
+    {
+        type            calculated;
+        value           $internalField;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

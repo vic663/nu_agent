@@ -1,0 +1,43 @@
+# Laminar heated pipe: exact solutions exist (Nu = 48/11, f = 64/Re), so this is a pure
+# *verification* case.  Runs in ~30 s on one core with OpenFOAM.
+name: pipe-laminar-Re200
+description: >
+  Fully developed laminar flow in a uniformly heated pipe, unit-Prandtl liquid, Re = 200.
+  Verifies the CFD backend against the exact fully developed Nusselt number and friction factor
+  and performs a three-level grid-convergence study.
+backend: openfoam
+case:
+  kind: heated_pipe
+  fluid:
+    name: unit_prandtl_liquid
+    rho: 1000.0
+    mu: 1.0e-3
+    cp: 4180.0
+    k: 4.18
+    mol_weight: 18.0
+  diameter: 0.02
+  length_over_diameter: 30
+  reynolds: 200
+  inlet_temperature: 300.0
+  wall_heat_flux: 1.0e4
+  turbulence_model: laminar
+  mesh:
+    n_radial: 20
+    cells_per_diameter: 6
+  numerics:
+    max_iterations: 3000
+    residual_target: 1.0e-5
+    write_interval: 500
+verification:
+  mesh_study: true
+  refinement_ratio: 2.0
+  n_levels: 3
+validation:
+  references:
+    - {quantity: Nu, source: laminar, tolerance: 0.02}
+    - {quantity: f, source: laminar, tolerance: 0.02}
+execution:
+  executor: local
+  n_procs: 1
+  max_attempts: 3
+  wallclock_minutes: 30

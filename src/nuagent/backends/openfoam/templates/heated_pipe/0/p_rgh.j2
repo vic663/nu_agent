@@ -1,0 +1,27 @@
+{% set field_class = "volScalarField" %}{% set field_name = "p_rgh" %}{% include "0/_header.j2" %}
+
+dimensions      [1 -1 -2 0 0 0 0];
+
+internalField   uniform {{ p_ref }};
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedFluxPressure;
+        value           $internalField;
+    }
+    outlet
+    {
+        type            fixedValue;
+        value           $internalField;
+    }
+    wall
+    {
+        type            fixedFluxPressure;
+        value           $internalField;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

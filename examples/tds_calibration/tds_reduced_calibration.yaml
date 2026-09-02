@@ -1,0 +1,40 @@
+# Thermal desorption spectroscopy of tungsten with one trap.
+# Bayesian calibration of the trap parameters (E_p, p_0, trapped inventory) against a synthetic
+# spectrum using the first-order reduced model, plus Sobol sensitivity of peak height/temperature.
+# Runs without any solver (mock backend); swap backend to 'festim' for the high-fidelity spectrum.
+name: tds-W-single-trap
+description: TDS trap-parameter calibration, reduced-order model (Kissinger/Redhead first-order kinetics).
+backend: mock
+case:
+  kind: tds
+  material: {name: tungsten, D_0: 4.1e-7, E_D: 0.39}
+  thickness: 1.0e-3
+  traps:
+    - {name: trap1, k_0: 3.8e-17, E_k: 0.39, p_0: 1.0e13, E_p: 1.0, n: 1.0e25}
+  implantation_flux: 1.0e20
+  implantation_time: 400
+  implantation_temperature: 300
+  rest_time: 50
+  ramp_rate: 8.0
+  final_temperature: 1200
+verification: {mesh_study: false}
+validation:
+  references:
+    - {quantity: T_peak, source: analytical, tolerance: 0.05}
+calibration:
+  parameters:
+    - {name: E_p, low: 0.6, high: 1.4}
+    - {name: log10_p_0, low: 11.0, high: 15.0}
+    - {name: n_t0, low: 1.0e24, high: 1.0e26, log_scale: true}
+  dataset: synthetic
+  n_walkers: 24
+  n_steps: 800
+  burn_in: 300
+uq:
+  parameters:
+    - {name: E_p, low: 0.9, high: 1.1}
+    - {name: log10_p_0, low: 12.5, high: 13.5}
+    - {name: n_t0, low: 5.0e24, high: 2.0e25, log_scale: true}
+  n_samples: 128
+  qois: [peak_flux, T_peak]
+execution: {executor: local}

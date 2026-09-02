@@ -1,0 +1,16 @@
+# NuAgent + OpenFOAM (ESI v2512).  The official image already sources the OpenFOAM
+# environment through its entrypoint, so `./Allrun` works directly.
+#   docker build -f docker/Dockerfile.openfoam -t nuagent-openfoam .
+#   docker run --rm -v $PWD:/work -w /work nuagent-openfoam nuagent run examples/heated_pipe/laminar_verification.yaml
+FROM opencfd/openfoam-default:2512
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /opt/nuagent
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python3 -m pip install --break-system-packages --no-cache-dir . \
+    && python3 -c "import nuagent; print('nuagent', nuagent.__version__)"
+ENV NUAGENT_FOAM_BASHRC=/openfoam/bash.rc
+WORKDIR /work

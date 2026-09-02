@@ -1,0 +1,14 @@
+# docker compose -f docker/compose.yaml run openfoam nuagent run examples/heated_pipe/laminar_verification.yaml
+services:
+  openfoam:
+    build: {context: .., dockerfile: docker/Dockerfile.openfoam}
+    image: nuagent-openfoam
+    volumes: ["..:/work"]
+    working_dir: /work
+    environment: [ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENAI_BASE_URL, NUAGENT_LLM_MODEL]
+  festim:
+    build: {context: .., dockerfile: docker/Dockerfile.festim}
+    image: nuagent-festim
+    volumes: ["..:/work"]
+    working_dir: /work
+    environment: [ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENAI_BASE_URL, NUAGENT_LLM_MODEL]

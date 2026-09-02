@@ -1,0 +1,85 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nuagent"
+version = "0.1.0"
+description = "Agentic workflow for verified, validated and calibrated nuclear thermal-hydraulics (OpenFOAM) and tritium-transport (FESTIM) simulations"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Baihua Ren" }]
+keywords = [
+  "agentic-workflow", "CFD", "OpenFOAM", "FESTIM", "tritium", "nuclear",
+  "verification-validation", "uncertainty-quantification", "bayesian-calibration",
+  "LangGraph", "scientific-computing",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "pydantic>=2.5",
+  "pydantic-settings>=2.0",
+  "pyyaml>=6.0",
+  "jinja2>=3.1",
+  "typer>=0.12",
+  "rich>=13.0",
+  "matplotlib>=3.7",
+  "emcee>=3.1",
+  "SALib>=1.4",
+  "scikit-learn>=1.3",
+  "langgraph>=1.0",
+  "langchain>=1.0",
+  "langchain-core>=1.0",
+]
+
+[project.optional-dependencies]
+anthropic = ["langchain-anthropic>=1.0"]
+openai = ["langchain-openai>=1.0"]          # also covers OpenAI-compatible local servers (vLLM, Ollama)
+mcp = ["mcp>=1.2"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.5", "mypy>=1.8"]
+all = ["nuagent[anthropic,openai,mcp,dev]"]
+
+[project.scripts]
+nuagent = "nuagent.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/<your-github-user>/nuagent"
+Documentation = "https://github.com/<your-github-user>/nuagent/tree/main/docs"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+nuagent = ["backends/openfoam/templates/**/*", "reporting/templates/*", "executors/templates/*", "py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "openfoam: requires an OpenFOAM installation on PATH (blockMesh, buoyantSimpleFoam)",
+  "festim: requires FESTIM + dolfinx",
+  "slow: long-running integration test",
+  "llm: requires an LLM API key",
+]
+addopts = "-ra"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "W"]
+ignore = ["B008", "E501"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true

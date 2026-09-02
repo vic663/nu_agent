@@ -1,0 +1,40 @@
+# Turbulent heated pipe (water, Re = 20 000, k-omega SST, wall-resolved y+ ~ 1).
+# *Validation* against the Gnielinski (Nu) and Petukhov (f) correlations.  ~5 min on one core.
+name: pipe-turbulent-Re20k
+description: >
+  Turbulent forced convection of water in a 20 mm pipe at Re = 20 000 with 50 kW/m2 uniform wall heat flux.
+  Validates the fully developed Nusselt number against Gnielinski (+-10 %) and the friction factor against Petukhov.
+backend: openfoam
+case:
+  kind: heated_pipe
+  fluid: {name: water_300K, rho: 996.0, mu: 8.5e-4, cp: 4180.0, k: 0.61, mol_weight: 18.0}
+  diameter: 0.02
+  length_over_diameter: 40
+  reynolds: 20000
+  inlet_temperature: 300.0
+  wall_heat_flux: 5.0e4
+  turbulence_model: kOmegaSST
+  wall_treatment: resolved
+  turbulent_prandtl: 0.85
+  mesh:
+    n_radial: 40
+    cells_per_diameter: 10
+    target_yplus: 1.0
+  numerics:
+    max_iterations: 4000
+    residual_target: 1.0e-5
+    write_interval: 500
+verification:
+  mesh_study: true
+  refinement_ratio: 2.0
+  n_levels: 3
+validation:
+  references:
+    - {quantity: Nu, source: gnielinski, tolerance: 0.15}
+    - {quantity: Nu, source: dittus_boelter, tolerance: 0.25}
+    - {quantity: f, source: petukhov, tolerance: 0.10}
+execution:
+  executor: local
+  n_procs: 1
+  max_attempts: 3
+  wallclock_minutes: 60

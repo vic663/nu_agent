@@ -1,0 +1,29 @@
+{% set field_class = "volScalarField" %}{% set field_name = "omega" %}{% include "0/_header.j2" %}
+
+dimensions      [0 0 -1 0 0 0 0];
+
+internalField   uniform {{ omega_in }};
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentMixingLengthFrequencyInlet;
+        mixingLength    {{ mixing_length }};
+        value           $internalField;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
+    }
+    wall
+    {
+        type            omegaWallFunction;
+        value           $internalField;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

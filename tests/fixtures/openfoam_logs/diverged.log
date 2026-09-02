@@ -1,0 +1,25 @@
+Starting time loop
+
+Time = 1
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 1, Final residual = 0.01, No Iterations 3
+DILUPBiCGStab:  Solving for Uy, Initial residual = 1, Final residual = 0.01, No Iterations 3
+DILUPBiCGStab:  Solving for h, Initial residual = 1, Final residual = 0.05, No Iterations 2
+GAMG:  Solving for p_rgh, Initial residual = 1, Final residual = 0.009, No Iterations 8
+time step continuity errors : sum local = 0.1, global = 0.001, cumulative = 0.001
+bounding k, min: -1.2e-05 max: 3.0 average: 0.5
+ExecutionTime = 0.1 s  ClockTime = 0 s
+
+Time = 2
+
+DILUPBiCGStab:  Solving for Ux, Initial residual = 5, Final residual = 0.5, No Iterations 1000
+DILUPBiCGStab:  Solving for Uy, Initial residual = nan, Final residual = nan, No Iterations 1000
+GAMG:  Solving for p_rgh, Initial residual = nan, Final residual = nan, No Iterations 1000
+time step continuity errors : sum local = nan, global = nan, cumulative = nan
+ExecutionTime = 0.2 s  ClockTime = 0 s
+
+
+--> FOAM FATAL ERROR: (openfoam-1912)
+Maximum number of iterations exceeded: 100
+
+    From function Foam::scalar Foam::species::thermo<Thermo, Type>::T(...)

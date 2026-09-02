@@ -1,0 +1,12 @@
+# FESTIM 2.x on top of the official FEniCSx (dolfinx) image, plus NuAgent for post-processing.
+#   docker build -f docker/Dockerfile.festim -t nuagent-festim .
+#   docker run --rm -v $PWD:/work -w /work nuagent-festim nuagent run examples/tritium_permeation/permeation_verification.yaml
+FROM dolfinx/dolfinx:stable
+
+RUN python3 -m pip install --no-cache-dir festim
+WORKDIR /opt/nuagent
+COPY pyproject.toml README.md ./
+COPY src ./src
+RUN python3 -m pip install --no-cache-dir . \
+    && python3 -c "import festim, nuagent; print('festim', festim.__version__, 'nuagent', nuagent.__version__)"
+WORKDIR /work

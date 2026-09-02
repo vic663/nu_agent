@@ -1,0 +1,32 @@
+{% set field_class = "volScalarField" %}{% set field_name = "T" %}{% include "0/_header.j2" %}
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform {{ t_in }};
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform {{ t_in }};
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform {{ t_in }};
+        value           $internalField;
+    }
+    wall
+    {
+        // uniform wall heat flux q'' = {{ q_wall }} W/m2
+        type            externalWallHeatFluxTemperature;
+        mode            flux;
+        q               uniform {{ q_wall }};
+        kappaMethod     fluidThermo;
+        value           $internalField;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

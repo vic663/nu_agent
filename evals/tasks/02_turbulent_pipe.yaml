@@ -1,0 +1,22 @@
+task: >
+  Water at 300 K flows through a 20 mm pipe at Re = 20000 with 50 kW/m2 wall heat flux. Set up a wall-resolved
+  k-omega SST RANS simulation and validate the fully developed Nusselt number against Gnielinski and the friction
+  factor against Petukhov.
+spec:
+  name: eval-turbulent-pipe
+  backend: mock
+  case:
+    kind: heated_pipe
+    fluid: {name: water_300K, rho: 996.0, mu: 8.5e-4, cp: 4180.0, k: 0.61, mol_weight: 18.0}
+    diameter: 0.02
+    length_over_diameter: 40
+    reynolds: 20000
+    wall_heat_flux: 5.0e4
+    turbulence_model: kOmegaSST
+  validation:
+    references:
+      - {quantity: Nu, source: gnielinski, tolerance: 0.15}
+      - {quantity: f, source: petukhov, tolerance: 0.10}
+expect:
+  qoi_ranges: {Nu: [115, 160], f: [0.022, 0.030]}
+  max_attempts: 1

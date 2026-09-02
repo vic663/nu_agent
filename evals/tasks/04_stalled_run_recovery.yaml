@@ -1,0 +1,14 @@
+# Too small an iteration budget: the run completes without converging and the agent must extend it.
+task: Laminar heated pipe at Re = 800 with only 200 iterations allowed; obtain a converged solution.
+spec:
+  name: eval-stalled-recovery
+  backend: mock
+  case:
+    kind: heated_pipe
+    reynolds: 800
+    turbulence_model: laminar
+    numerics: {max_iterations: 200}
+  execution: {max_attempts: 3}
+expect:
+  qoi_ranges: {Nu: [4.2, 4.6]}
+  max_attempts: 3

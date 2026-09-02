@@ -1,0 +1,27 @@
+# Same physics as turbulent_validation.yaml but finer and submitted to SLURM with a human approval gate.
+name: pipe-turbulent-Re50k-hpc
+description: Turbulent heated pipe at Re = 50 000, fine mesh, 16 MPI ranks on a SLURM cluster.
+backend: openfoam
+case:
+  kind: heated_pipe
+  fluid: {name: water_300K, rho: 996.0, mu: 8.5e-4, cp: 4180.0, k: 0.61, mol_weight: 18.0}
+  diameter: 0.02
+  length_over_diameter: 60
+  reynolds: 50000
+  wall_heat_flux: 1.0e5
+  turbulence_model: kOmegaSST
+  mesh: {n_radial: 80, cells_per_diameter: 20, target_yplus: 0.8}
+  numerics: {max_iterations: 8000, residual_target: 1.0e-6, write_interval: 1000}
+verification: {mesh_study: true, refinement_ratio: 2.0, n_levels: 3}
+validation:
+  references:
+    - {quantity: Nu, source: gnielinski, tolerance: 0.10}
+    - {quantity: f, source: prandtl_karman, tolerance: 0.08}
+execution:
+  executor: slurm
+  n_procs: 16
+  max_attempts: 2
+  wallclock_minutes: 120
+  require_approval: true
+  slurm_partition: compute
+  slurm_account: my-allocation

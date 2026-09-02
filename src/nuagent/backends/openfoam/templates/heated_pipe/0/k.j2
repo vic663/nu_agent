@@ -1,0 +1,33 @@
+{% set field_class = "volScalarField" %}{% set field_name = "k" %}{% include "0/_header.j2" %}
+
+dimensions      [0 2 -2 0 0 0 0];
+
+internalField   uniform {{ k_in }};
+
+boundaryField
+{
+    inlet
+    {
+        type            turbulentIntensityKineticEnergyInlet;
+        intensity       {{ intensity }};
+        value           $internalField;
+    }
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      $internalField;
+        value           $internalField;
+    }
+    wall
+    {
+{% if resolved %}
+        type            kLowReWallFunction;
+{% else %}
+        type            kqRWallFunction;
+{% endif %}
+        value           $internalField;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //

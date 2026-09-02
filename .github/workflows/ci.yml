@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: lint + unit tests (no solvers)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "${{ matrix.python-version }}"}
+      - run: pip install -e ".[dev]"
+      - run: ruff check src tests
+      - run: pytest -m "not openfoam and not festim and not slow" -q
+      - name: agent qualification suite (mock backend, rules policy)
+        run: nuagent eval evals/tasks --backend mock --policy rules --out runs/evals
+      - uses: actions/upload-artifact@v4
+        with: {name: eval-scoreboard-py${{ matrix.python-version }}, path: runs/evals/scoreboard.json}
+
+  openfoam:
+    name: OpenFOAM integration (laminar pipe verification)
+    runs-on: ubuntu-latest
+    container:
+      image: opencfd/openfoam-default:2512
+      options: --user root
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          apt-get update && apt-get install -y --no-install-recommends python3 python3-pip python3-venv git
+          python3 -m venv /opt/venv && . /opt/venv/bin/activate && pip install -e ".[dev]"
+      - name: run the laminar verification workflow with the real solver
+        run: |
+          . /opt/venv/bin/activate
+          export NUAGENT_FOAM_BASHRC=/openfoam/bash.rc
+          nuagent doctor
+          pytest -m openfoam -q
+          nuagent run examples/heated_pipe/laminar_verification.yaml --workdir runs/laminar
+      - uses: actions/upload-artifact@v4
+        with: {name: laminar-report, path: runs/laminar/report.md}
+
+  festim:
+    name: FESTIM integration (permeation verification)
+    runs-on: ubuntu-latest
+    container:
+      image: dolfinx/dolfinx:stable
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install festim -e ".[dev]"
+      - run: pytest -m festim -q
+      - run: nuagent run examples/tritium_permeation/permeation_verification.yaml --workdir runs/permeation
+      - uses: actions/upload-artifact@v4
+        with: {name: permeation-report, path: runs/permeation/report.md}

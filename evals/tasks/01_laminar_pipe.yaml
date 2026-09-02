@@ -1,0 +1,23 @@
+task: >
+  Simulate fully developed laminar flow of a unit-Prandtl liquid (rho=1000, mu=1e-3, cp=4180, k=4.18) in a 20 mm pipe
+  at Re = 200 with 10 kW/m2 uniform wall heating (L/D = 30), and verify the Nusselt number and friction factor
+  against the exact laminar solutions with a grid-convergence study.
+spec:
+  name: eval-laminar-pipe
+  backend: mock
+  case:
+    kind: heated_pipe
+    fluid: {name: unit_prandtl_liquid, rho: 1000.0, mu: 1.0e-3, cp: 4180.0, k: 4.18, mol_weight: 18.0}
+    diameter: 0.02
+    length_over_diameter: 30
+    reynolds: 200
+    wall_heat_flux: 1.0e4
+    turbulence_model: laminar
+    mesh: {n_radial: 20, cells_per_diameter: 6}
+  validation:
+    references:
+      - {quantity: Nu, source: laminar, tolerance: 0.03}
+      - {quantity: f, source: laminar, tolerance: 0.03}
+expect:
+  qoi_ranges: {Nu: [4.2, 4.6], f: [0.30, 0.34]}
+  max_attempts: 1

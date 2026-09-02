@@ -1,0 +1,19 @@
+# Permeation with a single McNabb-Foster trap: the time lag follows the Oriani effective diffusivity.
+name: tritium-permeation-trap
+backend: festim
+case:
+  kind: permeation
+  material: {name: tungsten, D_0: 4.1e-7, E_D: 0.39}
+  thickness: 5.0e-4
+  temperature: 700.0
+  upstream_concentration: 1.0e20
+  traps:
+    - {name: trap1, k_0: 3.8e-17, E_k: 0.39, p_0: 1.0e13, E_p: 1.0, n: 1.0e25}
+  n_cells: 300
+  n_steps: 800
+verification: {mesh_study: true, refinement_ratio: 2.0, n_levels: 3}
+validation:
+  references:
+    - {quantity: permeation_flux_ss, source: analytical, tolerance: 0.02}
+    - {quantity: time_lag, source: analytical, tolerance: 0.10}
+execution: {executor: local, max_attempts: 2}

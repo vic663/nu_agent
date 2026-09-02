@@ -1,0 +1,31 @@
+{% set field_class = "volScalarField" %}{% set field_name = "nut" %}{% include "0/_header.j2" %}
+
+dimensions      [0 2 -1 0 0 0 0];
+
+internalField   uniform 0;
+
+boundaryField
+{
+    inlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    outlet
+    {
+        type            calculated;
+        value           uniform 0;
+    }
+    wall
+    {
+{% if resolved %}
+        type            nutLowReWallFunction;
+{% else %}
+        type            nutkWallFunction;
+{% endif %}
+        value           uniform 0;
+    }
+{% include "0/_wedge.j2" %}
+}
+
+// ************************************************************************* //
