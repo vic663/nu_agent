@@ -245,3 +245,17 @@ def test_result_json_is_written(rt, tmp_path):
     )
     data = json.loads((Path(out["report_path"]).parent / "result.json").read_text())
     assert data["status"] == "success" and "qois" in data
+
+
+def test_relative_workdir_works_from_any_cwd(rt, tmp_path, monkeypatch):
+    """`nuagent run spec.yaml` without --workdir uses runs/<name>: relative paths must survive the
+    executor's change of directory into the case (regression)."""
+    monkeypatch.chdir(tmp_path)
+    out = run_workflow(
+        rt,
+        spec=_spec("rel", HeatedPipeCase(reynolds=500, turbulence_model="laminar")),
+        workdir="runs/rel",
+    )
+    assert out["status"] == "success", out.get("error")
+    assert Path(out["workdir"]).is_absolute()
+    assert (tmp_path / "runs" / "rel" / "report.md").exists()

@@ -92,7 +92,7 @@ class SlurmExecutor:
 
     def submit(self, case: CaseHandle, execution: ExecutionSpec, args: tuple[str, ...] = ()) -> str:
         script = case.path / "job.sbatch"
-        script.write_text(self.render_script(case, execution, args))
+        script.write_text(self.render_script(case, execution, args), newline="\n")
         out = subprocess.run(
             [self.sbatch, "--parsable", str(script)], capture_output=True, text=True, check=True
         )

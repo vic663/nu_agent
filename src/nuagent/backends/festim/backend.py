@@ -122,7 +122,7 @@ class FESTIMBackend:
         (workdir / "params.json").write_text(json.dumps(params, indent=2))
         shutil.copy(RUNNER, workdir / "run_festim.py")
         allrun = workdir / "Allrun"
-        allrun.write_text(ALLRUN.format(version=__version__, name=spec.name))
+        allrun.write_text(ALLRUN.format(version=__version__, name=spec.name), newline="\n")
         allrun.chmod(0o755)
         h = spec.case.thickness / params["n_cells"]
         handle = CaseHandle(

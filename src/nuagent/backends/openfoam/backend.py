@@ -332,12 +332,17 @@ class OpenFOAMBackend:
         for rel in files:
             out = workdir / rel
             out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_text(self.env.get_template(f"heated_pipe/{rel}.j2").render(**ctx))
+            out.write_text(
+                self.env.get_template(f"heated_pipe/{rel}.j2").render(**ctx), newline="\n"
+            )
         (workdir / "system/blockMeshDict").write_text(
-            self.env.get_template(f"{blockmesh_set}/system/blockMeshDict.j2").render(**ctx)
+            self.env.get_template(f"{blockmesh_set}/system/blockMeshDict.j2").render(**ctx),
+            newline="\n",
         )
         allrun = workdir / "Allrun"
-        allrun.write_text(self.env.get_template("heated_pipe/Allrun.j2").render(**ctx))
+        allrun.write_text(
+            self.env.get_template("heated_pipe/Allrun.j2").render(**ctx), newline="\n"
+        )
         allrun.chmod(0o755)
 
         mesh = ctx["_mesh"]
@@ -373,7 +378,7 @@ class OpenFOAMBackend:
         ctx["start_from"] = "latestTime"
         for rel in ("system/controlDict", "system/fvSchemes", "system/fvSolution"):
             (case.path / rel).write_text(
-                self.env.get_template(f"heated_pipe/{rel}.j2").render(**ctx)
+                self.env.get_template(f"heated_pipe/{rel}.j2").render(**ctx), newline="\n"
             )
         case.metadata["numerics"] = ctx["_numerics"].model_dump()
         case.metadata["adjustments"] = adjustments or {}

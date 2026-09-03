@@ -12,7 +12,9 @@ generated cases set ``runTimeModifiable true``).
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -34,6 +36,26 @@ def request_openfoam_stop(case: CaseHandle) -> bool:
         control.write_text(text.replace("stopAt          endTime;", "stopAt          writeNow;"))
         return True
     return False
+
+
+def launch_command(case: CaseHandle, args: tuple[str, ...] = ()) -> list[str]:
+    """Command that runs a case on this machine.
+
+    Cases are bash scripts (``Allrun``), as OpenFOAM and FESTIM users expect.  On a machine without a
+    Unix shell (native Windows without Git Bash or WSL) a case may ship an ``Allrun.py`` twin — the mock
+    backend does — which is run with the current interpreter instead, so the agent, the evals and the
+    LLM policies can be exercised anywhere; the real solvers still need bash (WSL2, a container or Linux).
+    """
+    case_dir = Path(case.path).resolve()
+    if shutil.which("bash") is not None:
+        return ["bash", str(case_dir / case.allrun.name), *args]
+    py_twin = case_dir / "Allrun.py"
+    if py_twin.exists():
+        return [sys.executable, str(py_twin), *args]
+    raise RuntimeError(
+        "no 'bash' on PATH: install Git for Windows (Git Bash) or run under WSL2/Docker to execute "
+        f"{case.allrun}; the mock backend runs natively through Allrun.py"
+    )
 
 
 class LocalExecutor:
@@ -63,8 +85,8 @@ class LocalExecutor:
         t0 = time.time()
         with open(out_path, "w") as out:
             proc = subprocess.Popen(
-                ["bash", str(case.allrun), *args],
-                cwd=case.path,
+                launch_command(case, args),
+                cwd=Path(case.path).resolve(),
                 stdout=out,
                 stderr=subprocess.STDOUT,
                 env=env,

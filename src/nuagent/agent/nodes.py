@@ -85,7 +85,8 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
             else:
                 spec = rt.policy.plan(state.get("task", ""))
                 msg = f"planned specification from task with policy '{rt.policy.name}'"
-            workdir = Path(state.get("workdir") or Path("runs") / spec.name)
+            # absolute: executors change directory into the case, so relative paths would break
+            workdir = Path(state.get("workdir") or Path("runs") / spec.name).resolve()
             workdir.mkdir(parents=True, exist_ok=True)
             spec.to_yaml(workdir / "spec.yaml")
             return {

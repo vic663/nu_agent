@@ -37,14 +37,29 @@ app = typer.Typer(
 console = Console()
 
 
+LLM_HELP = (
+    "No usable LLM configured. The deterministic workflow needs none (default --policy rules). "
+    "For --policy llm / `nuagent ask`, set one of:\n"
+    "  ANTHROPIC_API_KEY=...                       (default model anthropic:claude-sonnet-4-5)\n"
+    "  OPENAI_API_KEY=...  --model openai:gpt-4o\n"
+    "  OPENAI_BASE_URL=http://localhost:11434/v1 --model openai:<local model>   (Ollama / vLLM, no key)\n"
+    "and install the provider extra, e.g. pip install 'nuagent[anthropic]' or 'nuagent[openai]'."
+)
+
+
 def _runtime(backend: str, executor: str, policy: str, model: str | None):
     from nuagent.agent import Runtime, get_policy
     from nuagent.backends import get_backend
     from nuagent.executors import get_executor
 
-    pol = get_policy(policy, model=None)
-    if model:
+    if model:  # must be set before the LLM policy builds its chat model
         os.environ["NUAGENT_LLM_MODEL"] = model
+    try:
+        pol = get_policy(policy, model=None)
+    except Exception as exc:  # noqa: BLE001 - missing provider package / credentials
+        console.print(f"[red]{type(exc).__name__}: {exc}[/]\n")
+        console.print(LLM_HELP, markup=False)
+        raise typer.Exit(2) from None
     return Runtime(backend=get_backend(backend), executor=get_executor(executor), policy=pol)
 
 
@@ -142,6 +157,8 @@ def run(
     from nuagent.spec import SimulationSpec
 
     raw = yaml.safe_load(Path(spec).read_text())
+    if isinstance(raw, dict) and "spec" in raw and "case" not in raw:
+        raw = raw["spec"]  # an eval task file: run its reference specification
     if backend:
         raw["backend"] = backend
     if executor:
@@ -174,11 +191,18 @@ def ask(
     from nuagent.agent import run_workflow
 
     rt = _runtime(backend, executor, "llm", model)
-    if plan_only:
-        spec = rt.policy.plan(task)
-        console.print_json(spec.model_dump_json(indent=2))
-        raise typer.Exit()
-    result = run_workflow(rt, task=task, workdir=str(workdir) if workdir else None)
+    try:
+        if plan_only:
+            spec = rt.policy.plan(task)
+            console.print_json(spec.model_dump_json(indent=2))
+            raise typer.Exit()
+        result = run_workflow(rt, task=task, workdir=str(workdir) if workdir else None)
+    except typer.Exit:
+        raise
+    except Exception as exc:  # noqa: BLE001 - authentication / network errors from the provider
+        console.print(f"[red]{type(exc).__name__}: {str(exc)[:400]}[/]\n")
+        console.print(LLM_HELP, markup=False)
+        raise typer.Exit(2) from None
     _print_summary(result)
 
 

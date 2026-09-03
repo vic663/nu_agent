@@ -91,6 +91,8 @@ execution-success metric would have reported the SST run as a success.
 
 ## Quick start
 
+(Step-by-step version with Windows/WSL2/Docker instructions: [`docs/tutorial.md`](docs/tutorial.md).)
+
 ```bash
 git clone https://github.com/<your-github-user>/nuagent && cd nuagent
 python -m venv .venv && source .venv/bin/activate
@@ -204,6 +206,7 @@ docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
 
 ## Documentation
 
+- [Hands-on guide](docs/tutorial.md) — install, first run, how to read a report, writing your own spec, OpenFOAM / FESTIM / LLM / SLURM set-up, qualification, troubleshooting
 - [Design and architecture](docs/design.md) — state machine, guardrails, qualification strategy
 - [Case catalogue](docs/case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)
 - [Roadmap](docs/roadmap.md) — 3-week plan: coupled CFD→tritium permeation, MHD duct, ribbed channel, HPC

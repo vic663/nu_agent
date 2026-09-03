@@ -207,3 +207,49 @@ class TestUQ:
 
         sobol_analysis(model, priors, n_base=8, seed=0)
         assert min(seen) >= 1e-12 * 0.999 and max(seen) <= 1e-8 * 1.001
+
+
+class TestBashFreeLaunch:
+    """Native Windows has no bash: the mock backend must still run (Allrun.py twin)."""
+
+    def test_launch_command_falls_back_to_python_twin(self, tmp_path, monkeypatch):
+        import sys
+
+        from nuagent.backends import get_backend
+        from nuagent.executors import local as local_mod
+        from nuagent.spec import HeatedPipeCase, SimulationSpec
+
+        spec = SimulationSpec(
+            name="win",
+            backend="mock",
+            case=HeatedPipeCase(reynolds=500, turbulence_model="laminar"),
+        )
+        case = get_backend("mock").build(spec, tmp_path / "c")
+        monkeypatch.setattr(local_mod.shutil, "which", lambda name: None)
+        cmd = local_mod.launch_command(case, ("--continue",))
+        assert cmd[0] == sys.executable and cmd[1].endswith("Allrun.py") and cmd[-1] == "--continue"
+        (case.path / "Allrun.py").unlink()
+        with pytest.raises(RuntimeError, match="bash"):
+            local_mod.launch_command(case)
+
+    def test_workflow_runs_without_bash(self, tmp_path, monkeypatch):
+        from nuagent.agent import RulesPolicy, Runtime, run_workflow
+        from nuagent.backends import get_backend
+        from nuagent.executors import LocalExecutor
+        from nuagent.executors import local as local_mod
+        from nuagent.spec import HeatedPipeCase, SimulationSpec
+
+        monkeypatch.setattr(local_mod.shutil, "which", lambda name: None)
+        rt = Runtime(
+            backend=get_backend("mock"),
+            executor=LocalExecutor(poll_interval=0.2),
+            policy=RulesPolicy(),
+        )
+        spec = SimulationSpec(
+            name="win2",
+            backend="mock",
+            case=HeatedPipeCase(reynolds=500, turbulence_model="laminar"),
+        )
+        out = run_workflow(rt, spec=spec.model_dump(mode="json"), workdir=str(tmp_path / "w"))
+        assert out["status"] == "success", out.get("error")
+        assert out["validation"]["passed"]

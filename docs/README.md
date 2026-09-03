@@ -1,5 +1,6 @@
 # Documentation index
 
+- [tutorial.md](tutorial.md) — **start here**: install, first run, reading a report, writing a spec, OpenFOAM/FESTIM/LLM/cluster set-up, qualification, troubleshooting, demo script
 - [design.md](design.md) — architecture, workflow graph, guardrails, V&V logic, qualification
 - [case_catalogue.md](case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)
 - [roadmap.md](roadmap.md) — three-week plan and longer-term items
