@@ -12,3 +12,4 @@ case/
 !tests/fixtures/**/*.log
 .env
 .venv/
+.vscode/
