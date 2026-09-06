@@ -51,11 +51,16 @@ class Runtime:
         return "\n".join(log.read_text(errors="replace").splitlines()[-n:])
 
     def _poll(self, case: CaseHandle, elapsed: float) -> str | None:
-        """Live monitor: request a clean stop once the run satisfies the convergence criterion."""
+        """Live monitor: request a clean stop once the run satisfies the residual criterion.
+
+        This deliberately uses ``criterion_met`` rather than ``converged``: a running log has no
+        ``End`` marker yet, so ``converged`` is false by construction while the solver is alive.
+        The verdict is formed later, in ``monitor``, from the finished log plus the exit status.
+        """
         if not self.live_monitor or case.backend != "openfoam":
             return None
         report = self.backend.parse_log(case)
-        if report.converged and report.iterations > 50:
+        if report.criterion_met and report.iterations > 50:
             return "stop"
         if report.diverged:
             return "stop"
@@ -74,6 +79,105 @@ class Runtime:
 
 
 _reusable_case = reusable_case  # backwards-compatible alias
+
+
+def _grid_family_check(levels: list[dict[str, Any]]) -> dict[str, Any]:
+    """Verify the realised meshes form a systematic refinement family.
+
+    Checks, in order of how badly each one invalidates a GCI:
+    1. every level is strictly coarser than the previous one (identical levels carry no
+       information — the classic failure is a cell-count floor binding on two levels at once);
+    2. the directional counts actually change, so refinement is not one-dimensional;
+    3. the wall resolution does not change *regime* across the family (a wall-resolved closure at
+       y+ = 4 is not the same model as at y+ = 1), and wall functions stay out of the buffer layer.
+    """
+    issues: list[str] = []
+    ordered = sorted(levels, key=lambda lv: -(lv.get("h") or 0.0))  # coarse -> fine
+    for a, b in zip(ordered, ordered[1:], strict=False):
+        if not (a.get("n_cells") and b.get("n_cells")) or b["n_cells"] <= a["n_cells"]:
+            issues.append(
+                f"levels r={a.get('refinement')} and r={b.get('refinement')} do not differ in cell "
+                f"count ({a.get('n_cells')} vs {b.get('n_cells')})"
+            )
+            continue
+        ma, mb = a.get("mesh") or {}, b.get("mesh") or {}
+        for key in ("n_radial", "n_axial", "n_core"):
+            if key in ma and key in mb and ma[key] == mb[key]:
+                issues.append(
+                    f"levels r={a.get('refinement')} and r={b.get('refinement')} share the same "
+                    f"{key}={ma[key]}: refinement is not applied in that direction"
+                )
+    yps = [lv.get("mesh", {}).get("expected_yplus") for lv in ordered]
+    yps = [y for y in yps if isinstance(y, (int, float))]
+    if yps:
+        lo, hi = min(yps), max(yps)
+        if hi <= 2.0:
+            pass  # every level is comfortably inside the viscous sublayer
+        elif lo >= 30.0:
+            pass  # every level sits in the log layer, where wall functions are valid
+        elif hi <= 5.0:
+            # still nominally "wall resolved", but a low-Re closure integrated to y+ = 4 is not
+            # resolving the sublayer the way it does at y+ = 1
+            issues.append(
+                f"first-cell y+ reaches {hi:.3g} on the coarsest level (finest {lo:.3g}): a "
+                "low-Re closure is not resolving the viscous sublayer equally on every level; "
+                "anchor the y+ target to the coarsest level of the family"
+            )
+        else:
+            issues.append(
+                f"first-cell y+ spans {lo:.3g}-{hi:.3g} across the family, crossing the "
+                "wall-resolved / buffer / wall-function regimes: the levels do not discretise "
+                "the same model"
+            )
+    notes = [lv.get("mesh", {}).get("yplus_note") for lv in ordered]
+    return {
+        "systematic": not issues,
+        "issues": issues,
+        "yplus_range": [min(yps), max(yps)] if yps else None,
+        "notes": sorted({n for n in notes if n}),
+    }
+
+
+def planned_job_budget(spec: SimulationSpec) -> dict[str, Any]:
+    """Total solver submissions this workflow may make, for disclosure at the approval gate.
+
+    The main solve is one job; a three-level grid study adds two more; a closure ensemble adds one
+    per alternative closure and may run them concurrently.  Approving the first submission without
+    seeing this number is how a single 'yes' turns into sixteen concurrent cluster jobs.
+    """
+    parts = [f"{spec.execution.max_attempts} solve attempt(s) max"]
+    total = spec.execution.max_attempts
+    if spec.verification.mesh_study:
+        levels = max(0, spec.verification.n_levels - 1)
+        total += levels
+        parts.append(f"{levels} grid-refinement level(s)")
+    concurrent = 1
+    if spec.model_form is not None and spec.model_form.closures:
+        members = max(0, len(set(spec.model_form.closures)) - 1)
+        total += members
+        concurrent = max(concurrent, min(spec.model_form.parallel, members) or 1)
+        parts.append(f"{members} closure-ensemble member(s)")
+    return {
+        "total_jobs": total,
+        "breakdown": ", ".join(parts),
+        "max_concurrent": concurrent,
+        "max_core_minutes": total * spec.execution.n_procs * spec.execution.wallclock_minutes,
+    }
+
+
+def _approval_block(spec: SimulationSpec, state: AgentState, node: str) -> dict | None:
+    """Child solver submissions honour the same gate as the main solve."""
+    if spec.execution.require_approval and not state.get("approved"):
+        return {
+            "decisions": [
+                decision(
+                    node,
+                    "skipped: execution requires human approval and none was granted for this "
+                    "workflow, so no further solver jobs were submitted",
+                )
+            ]
+        }
+    return None
 
 
 def make_nodes(rt: Runtime) -> dict[str, Any]:
@@ -174,7 +278,7 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 ],
             }
         case_dir = Path(state["workdir"]) / f"attempt_{attempt}"
-        existing = reusable_case(case_dir, spec, adjustments)
+        existing = reusable_case(case_dir, spec, adjustments, backend=rt.backend)
         if existing is not None:
             existing.metadata["reused"] = True
             return {
@@ -216,14 +320,28 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
         from langgraph.types import interrupt
 
         case = CaseHandle.from_dict(state["case"])
+        budget = planned_job_budget(spec)
         answer = interrupt(
             {
-                "question": "Submit this case for execution?",
+                "question": (
+                    f"Submit this workflow for execution? It may submit up to {budget['total_jobs']} "
+                    f"job(s) ({budget['breakdown']}), each with {spec.execution.n_procs} task(s) and "
+                    f"a {spec.execution.wallclock_minutes} min wall-clock limit."
+                ),
                 "case": str(case.path),
                 "n_cells": case.n_cells,
                 "executor": spec.execution.executor.value,
                 "n_procs": spec.execution.n_procs,
                 "wallclock_minutes": spec.execution.wallclock_minutes,
+                # The gate covers the whole workflow, so the reviewer is shown the whole budget:
+                # the main solve, every grid-refinement level and every closure-ensemble member.
+                "total_jobs": budget["total_jobs"],
+                "job_breakdown": budget["breakdown"],
+                "max_concurrent": budget["max_concurrent"],
+                "max_core_minutes": budget["max_core_minutes"],
+                "script": str(case.path / "job.sbatch")
+                if spec.execution.executor is ExecutorKind.SLURM
+                else None,
             }
         )
         ok = bool(answer) and str(answer).lower() not in ("no", "false", "0", "reject")
@@ -265,6 +383,16 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
     def monitor(state: AgentState) -> dict:
         case = CaseHandle.from_dict(state["case"])
         report = rt.backend.parse_log(case)
+        # The solver's exit status is part of the verdict, not decoration.  A non-zero rc means
+        # the run did not finish, whatever the last residuals in the log happen to say.
+        rc = state.get("run", {}).get("returncode")
+        report.returncode = rc
+        if rc not in (None, 0) and report.converged:
+            report.converged = False
+            report.reason = (
+                f"residual criterion met but the solver exited with rc={rc}; "
+                f"not accepted as converged ({report.reason})"
+            )
         return {
             "convergence": report.to_dict(),
             "decisions": [
@@ -272,6 +400,9 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                     "monitor",
                     f"{report.status}: {report.reason}",
                     iterations=report.iterations,
+                    returncode=rc,
+                    criterion_met=report.criterion_met,
+                    completed=report.completed,
                     residuals={k: f"{v:.2e}" for k, v in report.final_residuals.items()},
                     continuity=report.continuity_error,
                 )
@@ -366,6 +497,10 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 decision("verify", "mesh study disabled", exact_error=out["exact_error"])
             )
             return {"verification": out, "decisions": decisions}
+        blocked = _approval_block(spec, state, "verify")
+        if blocked is not None:
+            out["skipped"] = "not approved"
+            return {"verification": out, "decisions": decisions + blocked["decisions"]}
 
         # grid-refinement study: the base grid is the finest; coarser levels are cheap
         r = spec.verification.refinement_ratio
@@ -404,16 +539,37 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 "refinement": lv,
                 "h": c.representative_h,
                 "n_cells": c.n_cells,
+                "mesh": c.metadata.get("mesh", {}),
                 "values": qq.values,
                 "path": str(c.path),
             }
             for lv, c, qq in levels
         ]
-        if len(levels) >= 2:
-            h = [c.representative_h for _, c, _ in levels]
+        # A correct GCI computed on a family that is not a systematic refinement is not a
+        # discretisation uncertainty.  Celik et al. (2008) require geometrically similar grids that
+        # differ significantly in every direction; check the *realised* meshes, not the requested
+        # refinement factors, and say so in the report when they do not.
+        out["family"] = _grid_family_check(out["levels"])
+        if out["family"]["issues"]:
+            decisions.append(
+                decision(
+                    "verify",
+                    "grid family is not a systematic refinement: "
+                    + "; ".join(out["family"]["issues"]),
+                    levels=[
+                        {k: lv.get(k) for k in ("refinement", "n_cells", "h")}
+                        for lv in out["levels"]
+                    ],
+                )
+            )
+        h = [c.representative_h for _, c, _ in levels if c.representative_h is not None]
+        if len(levels) >= 2 and len(h) == len(levels):
             for q in quantities:
-                f = [qq.values[q] for _, _, qq in levels]
-                if all(math.isfinite(v) for v in f):
+                raw = [qq.values.get(q) for _, _, qq in levels]
+                f = [
+                    float(v) for v in raw if isinstance(v, (int, float)) and math.isfinite(float(v))
+                ]
+                if len(f) == len(raw):
                     exact = out["exact_error"].get(q, {}).get("exact")
                     out["gci"][q] = grid_convergence_index(q, h, f, exact=exact).to_dict()
             decisions.append(
@@ -434,6 +590,46 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
             decisions.append(
                 decision("verify", "fewer than two converged levels; GCI not available")
             )
+
+        # ``require_asymptotic``: the grid family must actually be in the asymptotic range before
+        # its GCI may be quoted as a numerical-uncertainty band.
+        not_asymptotic = [
+            q
+            for q, v in out["gci"].items()
+            if v.get("convergence") != "monotonic"
+            or v.get("observed_order") is None
+            or v["observed_order"] < 0.5
+        ]
+        out["asymptotic_ok"] = not not_asymptotic and out.get("family", {}).get("systematic", True)
+        out["not_asymptotic"] = not_asymptotic
+        if not_asymptotic:
+            decisions.append(
+                decision(
+                    "verify",
+                    "grid family is not in the asymptotic range for: " + ", ".join(not_asymptotic),
+                    require_asymptotic=spec.verification.require_asymptotic,
+                )
+            )
+        if spec.verification.require_asymptotic and out.get("family", {}).get("issues"):
+            return {
+                "verification": out,
+                "status": "failed",
+                "error": (
+                    "verification.require_asymptotic is set and the grid family is not a "
+                    "systematic refinement: " + "; ".join(out["family"]["issues"])
+                ),
+                "decisions": decisions,
+            }
+        if spec.verification.require_asymptotic and not_asymptotic:
+            return {
+                "verification": out,
+                "status": "failed",
+                "error": (
+                    "verification.require_asymptotic is set and the grid family is not asymptotic "
+                    f"for: {', '.join(not_asymptotic)}"
+                ),
+                "decisions": decisions,
+            }
         return {"verification": out, "decisions": decisions}
 
     def model_form(state: AgentState) -> dict:
@@ -447,6 +643,9 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                     decision("model_form", "closure ensemble skipped: not a turbulent CFD case")
                 ]
             }
+        blocked = _approval_block(spec, state, "model_form")
+        if blocked is not None:
+            return blocked
         try:
             summary = run_closure_ensemble(rt, spec, dict(state))
         except Exception as exc:  # noqa: BLE001

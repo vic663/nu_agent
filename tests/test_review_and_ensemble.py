@@ -12,7 +12,7 @@ from nuagent.agent.preflight import preflight
 from nuagent.backends import get_backend
 from nuagent.evals.harness import pass_hat_k, run_suite
 from nuagent.executors import LocalExecutor
-from nuagent.spec import HeatedPipeCase, RibbedTubeCase, SimulationSpec, TDSCase
+from nuagent.spec import FLUID_PRESETS, HeatedPipeCase, RibbedTubeCase, SimulationSpec, TDSCase
 
 
 @pytest.fixture
@@ -58,9 +58,40 @@ class TestPreflight:
         pf = preflight(SimulationSpec(name="tds", backend="mock", case=TDSCase(traps=[])))
         assert not pf.ok and "trap" in pf.blocking[0]
 
-    def test_short_pipe_flags_entry_length(self):
+    def test_short_pipe_blocks_when_flow_cannot_develop(self):
+        """A domain shorter than the entry length cannot validate a fully-developed correlation."""
         pf = preflight(_spec("short", HeatedPipeCase(reynolds=2e4, length_over_diameter=5)))
-        assert any("entry length" in w for w in pf.warnings)
+        assert not pf.ok
+        assert any("fully developed" in b for b in pf.blocking)
+
+    def test_entry_length_warns_when_the_flow_develops_but_late(self):
+        """The flow does develop, but the averaging window starts inside the developing region."""
+        pf = preflight(
+            _spec(
+                "late",
+                HeatedPipeCase(
+                    reynolds=500,
+                    turbulence_model="laminar",
+                    fluid=FLUID_PRESETS["unit_prandtl_liquid"],  # entry length 25 D
+                    length_over_diameter=30,
+                    developed_fraction=0.1,  # evaluation starts at 27 D... just past 25 D
+                ),
+            )
+        )
+        assert pf.ok, pf.blocking
+        pf2 = preflight(
+            _spec(
+                "late2",
+                HeatedPipeCase(
+                    reynolds=500,
+                    turbulence_model="laminar",
+                    fluid=FLUID_PRESETS["unit_prandtl_liquid"],  # entry length 25 D
+                    length_over_diameter=30,
+                    developed_fraction=0.9,  # evaluation starts at 3 D, deep in the entry region
+                ),
+            )
+        )
+        assert pf2.ok and any("entry length" in w for w in pf2.warnings)
 
     def test_blocking_finding_stops_workflow_before_build(self, rt, tmp_path):
         spec = SimulationSpec(name="tds0", backend="mock", case=TDSCase(traps=[]))
@@ -195,7 +226,11 @@ class TestModelForm:
     def test_laminar_case_skips_ensemble(self, rt, tmp_path):
         spec = _spec(
             "lam",
-            HeatedPipeCase(reynolds=500, turbulence_model="laminar"),
+            HeatedPipeCase(
+                reynolds=500,
+                turbulence_model="laminar",
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+            ),
             model_form={"closures": ["kEpsilon"]},
         )
         out = run_workflow(rt, spec=spec.model_dump(mode="json"), workdir=str(tmp_path / "l"))
@@ -225,6 +260,9 @@ class TestPassK:
                             "kind": "heated_pipe",
                             "reynolds": 500,
                             "turbulence_model": "laminar",
+                            # Pr = 1: the water default needs 146 D to develop and pre-flight
+                            # blocks a fully-developed reference in the default 40 D pipe.
+                            "fluid": FLUID_PRESETS["unit_prandtl_liquid"].model_dump(),
                         },
                     },
                     "expect": {"max_attempts": 1, "qoi_ranges": {"Nu": [4.0, 4.7]}},

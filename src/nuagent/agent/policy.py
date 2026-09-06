@@ -199,6 +199,17 @@ def rules_critique(spec: SimulationSpec, results: dict[str, Any]) -> Critique:
     ]
     if failed:
         warnings.append(f"validation failed for: {', '.join(failed)}")
+    # A PASS against a correlation evaluated outside its stated validity range is not a validation.
+    out_of_range = [
+        f"{q} vs {r.get('source', '?')}"
+        for q, r in results.get("validation", {}).get("results", {}).items()
+        if "relative_error" in r and not r.get("reference_valid", True)
+    ]
+    if out_of_range:
+        warnings.append(
+            "reference correlation used outside its stated validity range for: "
+            + ", ".join(out_of_range)
+        )
     verdict = "accept" if not warnings else ("reject" if failed else "accept_with_warnings")
     return Critique(
         verdict=verdict,

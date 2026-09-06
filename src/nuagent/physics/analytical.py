@@ -97,6 +97,37 @@ def effective_diffusivity_from_trap(
     return effective_diffusivity_oriani(D, n_trap, k, p)
 
 
+def effective_diffusivity_multitrap(D: float, temperature: float, traps) -> float:
+    """Oriani/McNabb-Foster effective diffusivity for an arbitrary number of traps.
+
+    With local equilibrium between mobile and trapped hydrogen, each trap adds an independent
+    trapped population to the mobile balance,
+
+        d(c_m + sum_i c_t,i)/dt = D grad^2 c_m,
+
+    so the retardation factors **add in the denominator**:
+
+        D_eff = D / (1 + sum_i n_i k_i / p_i).
+
+    Applying the single-trap formula recursively (``D_eff <- D_eff / (1 + n k / p)`` per trap)
+    would give ``D / prod_i (1 + n_i k_i / p_i)``, which is wrong as soon as there are two traps
+    -- for two traps with n k / p = 1e7 each it under-predicts D_eff by six orders of magnitude.
+
+    References: Oriani (1970) Acta Metall. 18, 147; McNabb & Foster (1963) Trans. AIME 227, 618;
+    FESTIM theory documentation (independent c_t,i summed in the mobile balance).
+    """
+    retardation = 0.0
+    for tr in traps:
+        k = arrhenius(tr.k_0, tr.E_k, temperature)
+        p = arrhenius(tr.p_0, tr.E_p, temperature)
+        if p <= 0.0:  # pragma: no cover - guarded by the schema (p_0 > 0)
+            raise ValueError(
+                f"trap {getattr(tr, 'name', '?')!r} has a non-positive detrapping rate"
+            )
+        retardation += tr.n * k / p
+    return D / (1.0 + retardation)
+
+
 # --------------------------------------------------------------------------- #
 # Thermal desorption: Redhead peak temperature for first-order desorption
 # --------------------------------------------------------------------------- #

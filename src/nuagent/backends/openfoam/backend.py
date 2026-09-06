@@ -32,7 +32,11 @@ from nuagent.backends.base import (
     write_case_metadata,
 )
 from nuagent.backends.openfoam.logparse import parse_checkmesh, parse_log_file
-from nuagent.backends.openfoam.mesh import size_pipe_mesh, size_ribbed_mesh
+from nuagent.backends.openfoam.mesh import (
+    family_min_refinement,
+    size_pipe_mesh,
+    size_ribbed_mesh,
+)
 from nuagent.backends.openfoam.postprocess import extract_heated_pipe_qois, extract_ribbed_tube_qois
 from nuagent.spec import (
     HeatedPipeCase,
@@ -220,7 +224,14 @@ class OpenFOAMBackend:
             raise TypeError("OpenFOAM backend currently supports HeatedPipeCase only")
         numerics = self.apply_adjustments(case.numerics, adjustments)
         ribbed = isinstance(case, RibbedTubeCase)
-        mesh = size_ribbed_mesh(case, refinement) if ribbed else size_pipe_mesh(case, refinement)
+        # The coarsest level of the planned grid family determines where the y+ target is
+        # anchored, so that every level of a wall-resolved study stays wall-resolved.
+        fam = family_min_refinement(spec)
+        mesh = (
+            size_ribbed_mesh(case, refinement, fam)
+            if ribbed
+            else size_pipe_mesh(case, refinement, fam)
+        )
         fluid = case.fluid
         turbulent = case.turbulence_model is not TurbulenceModel.LAMINAR
         radius = 0.5 * case.diameter

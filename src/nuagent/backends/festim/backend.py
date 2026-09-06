@@ -155,6 +155,7 @@ class FESTIMBackend:
             converged=completed and not diverged,
             diverged=diverged,
             completed=completed,
+            criterion_met=completed,
             iterations=int(info.get("n_steps", 0)),
             reason=reason,
         )

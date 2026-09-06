@@ -10,7 +10,7 @@ from nuagent.agent.policy import Adjustments, Critique, LLMPolicy, rules_critiqu
 from nuagent.backends import get_backend
 from nuagent.backends.base import ConvergenceReport
 from nuagent.executors import LocalExecutor
-from nuagent.spec import HeatedPipeCase, PermeationCase, SimulationSpec
+from nuagent.spec import FLUID_PRESETS, HeatedPipeCase, PermeationCase, SimulationSpec
 
 
 @pytest.fixture
@@ -28,7 +28,14 @@ class TestWorkflow:
     def test_happy_path_laminar(self, rt, tmp_path):
         out = run_workflow(
             rt,
-            spec=_spec("lam", HeatedPipeCase(reynolds=500, turbulence_model="laminar")),
+            spec=_spec(
+                "lam",
+                HeatedPipeCase(
+                    reynolds=500,
+                    turbulence_model="laminar",
+                    fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+                ),
+            ),
             workdir=str(tmp_path / "lam"),
         )
         assert out["status"] == "success", out.get("error")
@@ -81,7 +88,13 @@ class TestWorkflow:
         spec = _spec(
             "stall",
             HeatedPipeCase(
-                reynolds=800, turbulence_model="laminar", numerics={"max_iterations": 200}
+                reynolds=800,
+                turbulence_model="laminar",
+                # Pr = 1 and 100 D of pipe: at the water default the thermal entry length is
+                # 233 D and pre-flight blocks the case as unvalidatable against 48/11.
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+                length_over_diameter=100,
+                numerics={"max_iterations": 200},
             ),
             execution={"max_attempts": 3},
         )
@@ -99,7 +112,11 @@ class TestWorkflow:
     def test_human_approval_gate(self, rt, tmp_path):
         spec = _spec(
             "hitl",
-            HeatedPipeCase(reynolds=500, turbulence_model="laminar"),
+            HeatedPipeCase(
+                reynolds=500,
+                turbulence_model="laminar",
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+            ),
             execution={"require_approval": True},
         )
         paused = run_workflow(rt, spec=spec, workdir=str(tmp_path / "hitl"), auto_approve=False)
@@ -240,7 +257,14 @@ class TestPolicies:
 def test_result_json_is_written(rt, tmp_path):
     out = run_workflow(
         rt,
-        spec=_spec("lam2", HeatedPipeCase(reynolds=500, turbulence_model="laminar")),
+        spec=_spec(
+            "lam2",
+            HeatedPipeCase(
+                reynolds=500,
+                turbulence_model="laminar",
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+            ),
+        ),
         workdir=str(tmp_path / "lam2"),
     )
     data = json.loads((Path(out["report_path"]).parent / "result.json").read_text())
@@ -253,7 +277,14 @@ def test_relative_workdir_works_from_any_cwd(rt, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     out = run_workflow(
         rt,
-        spec=_spec("rel", HeatedPipeCase(reynolds=500, turbulence_model="laminar")),
+        spec=_spec(
+            "rel",
+            HeatedPipeCase(
+                reynolds=500,
+                turbulence_model="laminar",
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+            ),
+        ),
         workdir="runs/rel",
     )
     assert out["status"] == "success", out.get("error")

@@ -5,13 +5,21 @@ Works for the SIMPLE-family solvers (``simpleFoam``, ``buoyantSimpleFoam``,
 parser is regex-based and streaming so it can be run on partial logs while a
 job is still executing.
 
-Convergence is judged in two complementary ways:
+The residual criterion is met in either of two ways:
 
 1. the solver's own ``residualControl`` message ("SIMPLE solution converged");
 2. NuAgent's criterion — the initial residuals of the *physically meaningful*
    fields (``ignore_fields`` excludes e.g. the azimuthal ``Uz`` component of an
    axisymmetric wedge, whose normalised residual is round-off noise) are below
    ``residual_target`` at the end of the log.
+
+Meeting that criterion sets ``criterion_met``, which is the signal the live
+monitor uses to ask a still-running solver to stop cleanly.  It is **not** the
+verdict: ``converged`` additionally requires ``completed`` (an ``End`` marker or
+a clean ``residualControl`` stop) and the absence of any fatal condition, and
+the run node further requires a zero exit status.  A job killed by the OOM
+killer or the scheduler can leave a log whose last written residuals sit under
+target; without the ``completed`` term that is indistinguishable from success.
 """
 
 from __future__ import annotations
@@ -33,7 +41,13 @@ _BOUND_RE = re.compile(r"^bounding (?P<field>\w+),")
 _CONVERGED_RE = re.compile(r"SIMPLE solution converged in ([0-9.eE+-]+) iterations")
 _END_RE = re.compile(r"^End\s*$")
 _FATAL_RE = re.compile(
-    r"FOAM FATAL (IO )?ERROR|^Floating point exception|sigFpe::sigHandler|sigSegv::sigHandler|Segmentation fault|^Aborted"
+    r"FOAM FATAL (IO )?ERROR|^Floating point exception|sigFpe::sigHandler|sigSegv::sigHandler"
+    r"|Segmentation fault|^Aborted"
+    # Out-of-band deaths: an MPI abort, an OOM kill or a scheduler kill leaves a log that ends
+    # mid-run.  Without these the last residuals may sit below target and the run would be read
+    # as converged.
+    r"|MPI_ABORT|MPI_Abort|APPLICATION TERMINATED WITH THE EXIT STRING"
+    r"|^Killed|Out of memory|std::bad_alloc|slurmstepd: error|DUE TO TIME LIMIT"
 )
 
 DEFAULT_IGNORE = ("Uz",)
@@ -115,18 +129,28 @@ def parse_openfoam_log(
             reason = reason or f"residual of {field} grew by >1e3 to {hist[-1]:.2e}"
 
     tracked = {k: v for k, v in last_initial.items() if k not in ignore_fields}
-    criterion_met = (
+    residual_target_met = (
         bool(tracked)
         and residual_target is not None
         and all(v < residual_target for v in tracked.values())
     )
-    converged = (solver_converged or criterion_met) and not diverged
     if solver_converged and not completed:
         completed = True  # residualControl stops the run cleanly before 'End' in some versions
+    # `criterion_met` is the live-stop signal; `converged` is the verdict and additionally
+    # requires that the solver actually finished.  Without the `completed` term a run killed by
+    # the scheduler or the OOM killer, whose last written residuals happen to sit under target,
+    # is indistinguishable from a converged one.
+    criterion_met = solver_converged or residual_target_met
+    converged = criterion_met and completed and not diverged
 
     if not reason:
         if solver_converged:
             reason = f"solver residualControl satisfied after {iterations} iterations"
+        elif criterion_met and not completed:
+            reason = (
+                f"residual target reached at iteration {iterations}, but the log has no End "
+                "marker: the run was truncated (killed, timed out, or still running)"
+            )
         elif criterion_met:
             worst = max(tracked.items(), key=lambda kv: kv[1])
             reason = (
@@ -148,6 +172,7 @@ def parse_openfoam_log(
         converged=converged,
         diverged=diverged,
         completed=completed,
+        criterion_met=criterion_met,
         iterations=iterations,
         final_residuals=dict(last_initial),
         continuity_error=continuity,

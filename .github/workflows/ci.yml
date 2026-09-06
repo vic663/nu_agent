@@ -16,14 +16,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "${{ matrix.python-version }}"}
+        with:
+          python-version: "${{ matrix.python-version }}"
       - run: pip install -e ".[dev]"
       - run: ruff check src tests
       - run: pytest -m "not openfoam and not festim and not slow" -q
       - name: agent qualification suite (mock backend, rules policy)
+        # 10 tasks: 7 that must succeed and 3 negative controls that must be refused.
+        # A non-zero exit means the agent got one of them wrong in either direction.
         run: nuagent eval evals/tasks --backend mock --policy rules --out runs/evals
       - uses: actions/upload-artifact@v4
-        with: {name: eval-scoreboard-py${{ matrix.python-version }}, path: runs/evals/scoreboard.json}
+        with:
+          # NOTE: a "${{ ... }}" expression cannot appear unquoted inside a YAML flow mapping.
+          # Written in flow style this file was invalid YAML and GitHub rejected the whole
+          # workflow, which is why no job in it had ever run.
+          name: eval-scoreboard-py${{ matrix.python-version }}
+          path: runs/evals/scoreboard.json
 
   openfoam:
     name: OpenFOAM integration (laminar pipe verification)
@@ -53,7 +61,7 @@ jobs:
       image: dolfinx/dolfinx:stable
     steps:
       - uses: actions/checkout@v4
-      - run: pip install festim -e ".[dev]"
+      - run: pip install -e ".[dev]" && pip install festim
       - run: pytest -m festim -q
       - run: nuagent run examples/tritium_permeation/permeation_verification.yaml --workdir runs/permeation
       - uses: actions/upload-artifact@v4

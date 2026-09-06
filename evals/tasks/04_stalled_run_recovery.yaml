@@ -1,11 +1,20 @@
 # Too small an iteration budget: the run completes without converging and the agent must extend it.
+#
+# NOTE (2026-09-06): this task previously ran Re = 800 in water (Pr = 5.8) through a 40 D pipe and
+# validated Nu against the fully developed 48/11.  The thermal entry length there is ~233 D, so the
+# target value was physically unreachable and the task still scored PASS — the clearest single
+# demonstration that a suite without negative controls cannot detect a physics error.  The fluid is
+# now Pr = 1 and the pipe is long enough for the flow to develop; the unreachable variant is kept
+# deliberately as negative control 09.
 task: Laminar heated pipe at Re = 800 with only 200 iterations allowed; obtain a converged solution.
 spec:
   name: eval-stalled-recovery
   backend: mock
   case:
     kind: heated_pipe
+    fluid: {name: unit_prandtl_liquid, rho: 1000.0, mu: 1.0e-3, cp: 4180.0, k: 4.18, mol_weight: 18.0}
     reynolds: 800
+    length_over_diameter: 100
     turbulence_model: laminar
     numerics: {max_iterations: 200}
   execution: {max_attempts: 3}

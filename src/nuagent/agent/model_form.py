@@ -140,12 +140,12 @@ def summarise_ensemble(
         ref = refs.get(q)
         if ref is not None:
             try:
-                r = reference_for(spec, ref)
-                dev = {c: (v - r["value"]) / r["value"] for c, v in vals.items()}
+                rv = reference_for(spec, ref)
+                dev = {c: (v - rv["value"]) / rv["value"] for c, v in vals.items()}
                 entry["reference"] = {
-                    "value": r["value"],
-                    "source": r["source"],
-                    "uncertainty": r.get("uncertainty", 0.0),
+                    "value": rv["value"],
+                    "source": rv["source"],
+                    "uncertainty": rv.get("uncertainty", 0.0),
                     "tolerance": ref.tolerance,
                     "deviation": dev,
                     "within_tolerance": [c for c, d in dev.items() if abs(d) <= ref.tolerance],
@@ -171,6 +171,8 @@ def summarise_ensemble(
 def run_closure_ensemble(rt: Any, spec: SimulationSpec, state: dict[str, Any]) -> dict[str, Any]:
     """Run every alternative closure of ``spec.model_form`` on the base grid and reduce the results."""
     mf = spec.model_form
+    if mf is None:  # pragma: no cover - the node guards this, but the function is public
+        raise ValueError("run_closure_ensemble requires spec.model_form")
     workdir = Path(state["workdir"])
     adjustments = dict(state.get("adjustments", {}))
     primary = spec.case.turbulence_model

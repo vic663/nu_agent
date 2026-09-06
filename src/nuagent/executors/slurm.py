@@ -19,7 +19,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, StrictUndefined
 
 from nuagent import __version__
 from nuagent.backends.base import CaseHandle
@@ -45,6 +45,21 @@ def _walltime(minutes: int) -> str:
     return f"{h:02d}:{m:02d}:00"
 
 
+# Values from these environment variables are interpolated into the generated job.sbatch, which the
+# scheduler then executes.  Newlines, command substitution and shell metacharacters are rejected at
+# the point of use rather than escaped, so that a misconfigured site variable fails loudly.
+_SHELL_UNSAFE = re.compile(r"[\n\r`$;&|<>()\\\"']")
+
+
+def _shell_safe(value: str, source: str) -> str:
+    if _SHELL_UNSAFE.search(value):
+        raise ValueError(
+            f"{source} contains a shell metacharacter or newline ({value!r}); "
+            "it is interpolated into the generated job.sbatch and must be a plain token"
+        )
+    return value
+
+
 class SlurmExecutor:
     name = "slurm"
 
@@ -60,7 +75,10 @@ class SlurmExecutor:
         self.sbatch, self.squeue, self.sacct = sbatch, squeue, sacct
         self.cores_per_node = cores_per_node
         self.env = Environment(
-            loader=FileSystemLoader(str(TEMPLATES)), trim_blocks=True, lstrip_blocks=True
+            loader=FileSystemLoader(str(TEMPLATES)),
+            trim_blocks=True,
+            lstrip_blocks=True,
+            undefined=StrictUndefined,
         )
 
     def available(self) -> bool:
@@ -72,8 +90,16 @@ class SlurmExecutor:
     ) -> str:
         n_tasks = execution.n_procs
         nodes = max(1, -(-n_tasks // self.cores_per_node))
-        modules = [m for m in os.environ.get("NUAGENT_SLURM_MODULES", "").split(":") if m]
-        extra = [d for d in os.environ.get("NUAGENT_SLURM_EXTRA", "").split(";") if d.strip()]
+        modules = [
+            _shell_safe(m, "NUAGENT_SLURM_MODULES")
+            for m in os.environ.get("NUAGENT_SLURM_MODULES", "").split(":")
+            if m
+        ]
+        extra = [
+            _shell_safe(d.strip(), "NUAGENT_SLURM_EXTRA")
+            for d in os.environ.get("NUAGENT_SLURM_EXTRA", "").split(";")
+            if d.strip()
+        ]
         return self.env.get_template("job.sbatch.j2").render(
             job_name=f"nuagent-{case.path.name}"[:64],
             case_dir=str(case.path.resolve()),
@@ -112,8 +138,8 @@ class SlurmExecutor:
         a = subprocess.run(
             [self.sacct, "-n", "-X", "-j", job_id, "-o", "State"], capture_output=True, text=True
         )
-        st = a.stdout.strip().split()
-        return st[0].split("+")[0] if st else "UNKNOWN"
+        fields = a.stdout.strip().split()
+        return fields[0].split("+")[0] if fields else "UNKNOWN"
 
     def wait(self, case: CaseHandle, job_id: str, timeout_s: float) -> str:
         t0 = time.time()

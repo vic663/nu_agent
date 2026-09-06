@@ -1,0 +1,22 @@
+# NEGATIVE CONTROL — the workflow must REFUSE this, not answer it.
+#
+# A thermal-desorption spectrum is produced by hydrogen leaving traps.  A TDS case with no traps
+# defined has no desorption peak to compute, so any T_peak the workflow reported would be an
+# artefact.  Pre-flight must block before a single cell is meshed.
+task: >
+  Run a thermal desorption spectroscopy simulation on tungsten with a 0.5 K/s ramp and report the
+  peak temperature.
+spec:
+  name: eval-nc-tds-no-traps
+  backend: mock
+  case:
+    kind: tds
+    material: {name: tungsten, D_0: 4.1e-7, E_D: 0.39, K_S_0: 1.87e24, E_KS: 1.04}
+    thickness: 2.0e-3
+    ramp_rate: 0.5
+    implantation_temperature: 300.0
+    final_temperature: 900.0
+    traps: []
+expect:
+  outcome: fail
+  blocked_by_preflight: true

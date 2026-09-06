@@ -404,7 +404,14 @@ class ReferenceSpec(BaseModel):
         ),
     )
     tolerance: float = Field(
-        0.10, gt=0, description="Acceptable relative deviation, e.g. 0.10 = 10 %"
+        0.10,
+        gt=0,
+        le=0.5,
+        description=(
+            "Acceptable relative deviation, e.g. 0.10 = 10 %. Bounded at 0.5: a validation "
+            "tolerance looser than 50 % is not a validation, and an unbounded field would let "
+            "the planner write its own passing grade."
+        ),
     )
 
 
@@ -413,7 +420,11 @@ class VerificationSpec(BaseModel):
     refinement_ratio: float = Field(2.0, gt=1)
     n_levels: int = Field(3, ge=2, le=5)
     require_asymptotic: bool = Field(
-        False, description="Fail verification if observed order < 0.5 or oscillatory"
+        False,
+        description=(
+            "Fail the run if the grid family is not in the asymptotic range for every verified "
+            "quantity (non-monotonic convergence, or an observed order below 0.5)"
+        ),
     )
 
 
@@ -484,9 +495,12 @@ class ExecutionSpec(BaseModel):
     require_approval: bool = Field(
         False, description="Pause for human approval before submitting HPC jobs"
     )
-    slurm_partition: str | None = None
-    slurm_account: str | None = None
-    docker_image: str | None = None
+    # These three reach a generated shell script (job.sbatch) or a container runtime, so they are
+    # charset-restricted at the schema boundary: a newline in an unvalidated value would terminate
+    # the '#SBATCH' comment and turn the remainder into an executed line.
+    slurm_partition: str | None = Field(None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.,-]{0,63}$")
+    slurm_account: str | None = Field(None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    docker_image: str | None = Field(None, pattern=r"^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,199}$")
 
 
 class SimulationSpec(BaseModel):

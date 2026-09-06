@@ -18,6 +18,8 @@ class PipeMesh:
     expected_yplus: float | None
     representative_h: float  # sqrt(area / n_cells) [m]
     n_cells: int
+    radial_count_clamped: bool = False  # the wall-function floor bound n_radial (degenerate family)
+    yplus_note: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -28,7 +30,22 @@ class PipeMesh:
             "expected_yplus": self.expected_yplus,
             "representative_h": self.representative_h,
             "n_cells": self.n_cells,
+            "radial_count_clamped": self.radial_count_clamped,
+            "yplus_note": self.yplus_note,
         }
+
+
+def family_min_refinement(spec) -> float:
+    """Coarsest refinement factor in the grid family a specification will actually run.
+
+    ``verify`` builds levels at ``refinement_ratio ** -k`` for k = 0 .. n_levels-1, so the
+    coarsest level is ``refinement_ratio ** -(n_levels - 1)``.  Returns 1.0 when no mesh study
+    is requested, which reproduces single-grid behaviour.
+    """
+    v = getattr(spec, "verification", None)
+    if v is None or not getattr(v, "mesh_study", False):
+        return 1.0
+    return float(v.refinement_ratio ** -(v.n_levels - 1))
 
 
 def geometric_expansion_ratio(first: float, total: float, n: int) -> float:
@@ -58,34 +75,59 @@ def geometric_expansion_ratio(first: float, total: float, n: int) -> float:
     return 0.5 * (lo + hi)
 
 
-def size_pipe_mesh(case: HeatedPipeCase, refinement: float = 1.0) -> PipeMesh:
+def size_pipe_mesh(
+    case: HeatedPipeCase, refinement: float = 1.0, family_min_refinement: float = 1.0
+) -> PipeMesh:
     """Choose Nx, Nr and the radial grading for the requested refinement level.
 
-    ``refinement`` scales the cell count in *both* directions (and the target
-    first-cell height), so successive levels form a consistent family for the
-    grid-convergence study.
+    ``refinement`` scales the cell count in *both* directions (and the first-cell height), so
+    successive levels are geometrically similar, as Celik et al. (2008) / ASME V&V 20 require.
+
+    ``family_min_refinement`` is the *coarsest* refinement factor in the planned grid family
+    (e.g. 0.25 for a three-level study at ratio 2).  It matters because a wall-resolved RANS
+    closure is not the same model at y+ = 1 and at y+ = 4: if the y+ target were anchored to the
+    base grid, the coarse levels would drift out of the wall-resolved regime and the family would
+    mix discretisation error with a change of wall treatment.  The target is therefore anchored to
+    the coarsest level, so **every** level satisfies it and the base grid is correspondingly finer.
+    The default of 1.0 reproduces single-grid behaviour for a standalone build.
     """
     radius = 0.5 * case.diameter
     n_axial = max(
         4, int(round(case.mesh.cells_per_diameter * case.length_over_diameter * refinement))
     )
     n_radial = max(4, int(round(case.mesh.n_radial * refinement)))
+    clamped = False
+    yplus_note = ""
+    family_min = min(max(family_min_refinement, 1e-6), 1.0)
 
     turbulent = case.turbulence_model.value != "laminar"
     if turbulent and case.wall_treatment is WallTreatment.RESOLVED:
         y_centre = first_cell_height_for_yplus(
             case.mesh.target_yplus, case.reynolds, case.diameter, case.fluid.nu
         )
-        first = 2.0 * y_centre / refinement
-        expected_yplus = case.mesh.target_yplus / refinement
+        # anchored to the coarsest level: base y+ = target * family_min, coarsest y+ = target
+        first = 2.0 * y_centre * family_min / refinement
+        expected_yplus = case.mesh.target_yplus * family_min / refinement
+        if family_min < 1.0:
+            yplus_note = (
+                f"y+ target {case.mesh.target_yplus:g} anchored to the coarsest level of the "
+                f"family (refinement {family_min:g}); every level stays wall-resolved"
+            )
     elif turbulent:
-        # wall functions: aim for y+ ~ 40 on the base grid.  The first cell must sit in the log layer,
-        # so if the requested radial count cannot accommodate a cell that tall the radial count is
-        # reduced (a wall-function mesh at low Re is coarse by construction).
+        # Wall functions need the first cell in the log layer, so here the *finest* level is the
+        # binding constraint and the target is anchored to the base grid; coarser levels sit
+        # higher in the log layer, which remains valid.
         y_centre = first_cell_height_for_yplus(40.0, case.reynolds, case.diameter, case.fluid.nu)
         first = 2.0 * y_centre / refinement
         expected_yplus = 40.0 / refinement
+        n_radial_wanted = n_radial
         n_radial = max(4, min(n_radial, int(radius / first)))
+        clamped = n_radial != n_radial_wanted
+        if clamped:
+            yplus_note = (
+                f"radial count clamped from {n_radial_wanted} to {n_radial} so the first cell fits "
+                "in the log layer; consecutive levels may not differ radially — check the family"
+            )
     else:
         # laminar: mild wall refinement helps the wall temperature gradient
         first = 0.5 * radius / n_radial
@@ -110,6 +152,8 @@ def size_pipe_mesh(case: HeatedPipeCase, refinement: float = 1.0) -> PipeMesh:
         expected_yplus=expected_yplus,
         representative_h=math.sqrt(area / n_cells),
         n_cells=n_cells,
+        radial_count_clamped=clamped,
+        yplus_note=yplus_note,
     )
 
 
@@ -143,6 +187,7 @@ class RibbedMesh:
     n_cells: int
     radius: float
     rib_tip_radius: float
+    yplus_note: str = ""
 
     @property
     def stations(self) -> list[float]:
@@ -159,6 +204,7 @@ class RibbedMesh:
             "expected_yplus": self.expected_yplus,
             "representative_h": self.representative_h,
             "n_cells": self.n_cells,
+            "yplus_note": self.yplus_note,
             "modules": [{"x_start": s.x0, "x_end": s.x1} for s in self.segments if s.kind == "rib"],
         }
 
@@ -176,7 +222,9 @@ def _graded_cell_count(length: float, first: float, last: float) -> int:
         n += 1
 
 
-def size_ribbed_mesh(case, refinement: float = 1.0) -> RibbedMesh:
+def size_ribbed_mesh(
+    case, refinement: float = 1.0, family_min_refinement: float = 1.0
+) -> RibbedMesh:
     """Block layout and cell counts for :class:`~nuagent.spec.RibbedTubeCase`.
 
     All blocks share the core radial distribution (fine at the rib-tip radius, which is a
@@ -191,16 +239,42 @@ def size_ribbed_mesh(case, refinement: float = 1.0) -> RibbedMesh:
     r1 = R - e
     mesh = case.mesh
 
-    # first-cell height from the *ribbed* friction factor (u_tau is much larger than in a smooth tube)
+    # First-cell height from the *local* wall shear between the ribs.
+    #
+    # Webb's correlation returns the TOTAL pressure-drop friction factor, which for e/D = 0.04,
+    # p/e = 10 at Re = 2e4 is 9.15x the smooth-tube value -- but that excess is form drag on the
+    # rib faces, not shear on the inter-rib floor.  Using it inflates u_tau by sqrt(9.15) ~ 3, so a
+    # requested y+ = 40 wall-function mesh actually lands near y+ = 13, inside the buffer layer
+    # where wall functions are invalid, while the metadata still claims 40.
+    #
+    # The floor shear lies between the smooth-tube value and the total; the smooth-tube value is
+    # used as the defensible lower bound on u_tau (upper bound on the cell height), and BOTH
+    # bounds are recorded so the reported y+ carries its own uncertainty instead of a false point
+    # value.
     if case.turbulence_model.value != "laminar":
-        f_d = webb_ribbed_tube(
+        from nuagent.physics.correlations import friction_factor_petukhov
+
+        f_total = webb_ribbed_tube(
             case.reynolds, case.fluid.pr, case.rib_height_over_diameter, case.rib_pitch_over_height
         ).friction_darcy
-        u_tau = case.inlet_velocity * math.sqrt(f_d / 8.0)
-        target = mesh.target_yplus if case.wall_treatment is WallTreatment.RESOLVED else 40.0
-        first = 2.0 * target * case.fluid.nu / u_tau / refinement
-        expected_yplus = target / refinement
+        f_smooth = friction_factor_petukhov(case.reynolds).value
+        u_tau = case.inlet_velocity * math.sqrt(f_smooth / 8.0)  # lower bound on the floor shear
+        u_tau_hi = case.inlet_velocity * math.sqrt(f_total / 8.0)  # upper bound (total, incl. form)
+        resolved = case.wall_treatment is WallTreatment.RESOLVED
+        target = mesh.target_yplus if resolved else 40.0
+        # wall-resolved families anchor the target to the coarsest level (see size_pipe_mesh)
+        anchor = min(max(family_min_refinement, 1e-6), 1.0) if resolved else 1.0
+        first = 2.0 * target * anchor * case.fluid.nu / u_tau / refinement
+        expected_yplus = target * anchor / refinement
+        yplus_hi = expected_yplus * u_tau_hi / u_tau
+        yplus_note = (
+            f"y+ estimated from the smooth-tube wall shear: {expected_yplus:.3g} "
+            f"(upper bound {yplus_hi:.3g} if the floor carried Webb's total friction factor "
+            f"f={f_total:.4g} rather than the smooth-tube f={f_smooth:.4g}); the rib form drag "
+            "does not act on the inter-rib floor, so the true value sits between the two"
+        )
     else:
+        yplus_note = ""
         first = 0.5 * e / max(2, mesh.n_radial_rib)
         expected_yplus = None
 
@@ -262,6 +336,7 @@ def size_ribbed_mesh(case, refinement: float = 1.0) -> RibbedMesh:
         rib_layer_grading=layer_grading,
         first_cell_height=first,
         expected_yplus=expected_yplus,
+        yplus_note=yplus_note,
         representative_h=math.sqrt(area / n_cells),
         n_cells=n_cells,
         radius=R,

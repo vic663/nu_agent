@@ -24,6 +24,22 @@ def _git(cmd: list[str], cwd: Path | None = None) -> str | None:
         return None
 
 
+def _git_state(repo: Path) -> dict[str, Any]:
+    """Commit and working-tree state, only when ``repo`` really is the nuagent checkout.
+
+    ``git rev-parse`` walks up the directory tree, so an installed (non-editable) copy would
+    otherwise stamp results with the HEAD of whatever unrelated repository encloses site-packages.
+    """
+    top = _git(["rev-parse", "--show-toplevel"], repo)
+    if top is None or Path(top).resolve() != repo.resolve():
+        return {"commit": None, "dirty": None, "note": "not a nuagent git checkout"}
+    porcelain = _git(["status", "--porcelain"], repo)
+    return {
+        "commit": _git(["rev-parse", "HEAD"], repo),
+        "dirty": None if porcelain is None else bool(porcelain),
+    }
+
+
 def _pkg_version(name: str) -> str | None:
     try:
         return metadata.version(name)
@@ -56,24 +72,34 @@ def collect_provenance(
 ) -> dict[str, Any]:
     repo = Path(__file__).resolve().parents[3]
     inputs = {}
-    for f in sorted(Path(workdir).rglob("*")):
-        if (
-            f.is_file()
-            and f.suffix in (".yaml", ".json")
-            and "attempt" in str(f.parent)
-            or f.name in ("spec.yaml",)
-        ):
+    root = Path(workdir)
+    for f in sorted(root.rglob("*")):
+        if not f.is_file():
+            continue
+        try:
+            rel = f.relative_to(root)
+        except ValueError:  # pragma: no cover - rglob results are always under root
+            continue
+        # Note the explicit grouping: without it, `and` binds tighter than `or` and the
+        # `is_file()` guard would not apply to the spec.yaml branch.  The directory test is made
+        # against the *relative* path so that an absolute workdir containing e.g. "attempt"
+        # cannot change which files are digested; grid levels and ensemble members are included
+        # because their values are what the GCI and the model-form band are computed from.
+        in_run_dir = any(
+            p.startswith(("attempt", "verify_", "model_form_")) for p in rel.parts[:-1]
+        )
+        if (f.suffix in (".yaml", ".json") and in_run_dir) or rel.name == "spec.yaml":
             try:
-                inputs[str(f.relative_to(workdir))] = file_digest(f)
+                inputs[str(rel)] = file_digest(f)
             except OSError:
                 pass
     return {
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "nuagent_version": _pkg_version("nuagent"),
-        "git": {
-            "commit": _git(["rev-parse", "HEAD"], repo),
-            "dirty": bool(_git(["status", "--porcelain"], repo)),
-        },
+        # ``dirty`` is tri-state on purpose: ``None`` means the working-tree state could not be
+        # determined (no git, not a checkout, timeout).  Reporting ``false`` there would be a
+        # positive claim of a clean tree made from no information.
+        "git": _git_state(repo),
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "hostname": platform.node(),

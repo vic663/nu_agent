@@ -10,7 +10,7 @@ from nuagent.calibration import BayesianCalibrator, GPSurrogate, latin_hypercube
 from nuagent.executors import DockerExecutor, LocalExecutor, SlurmExecutor
 from nuagent.executors.local import request_openfoam_stop
 from nuagent.physics import reduced
-from nuagent.spec import ExecutionSpec, ParameterPrior
+from nuagent.spec import FLUID_PRESETS, ExecutionSpec, ParameterPrior
 from nuagent.uq import sobol_analysis
 
 
@@ -222,7 +222,11 @@ class TestBashFreeLaunch:
         spec = SimulationSpec(
             name="win",
             backend="mock",
-            case=HeatedPipeCase(reynolds=500, turbulence_model="laminar"),
+            case=HeatedPipeCase(
+                reynolds=500,
+                turbulence_model="laminar",
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+            ),
         )
         case = get_backend("mock").build(spec, tmp_path / "c")
         monkeypatch.setattr(local_mod.shutil, "which", lambda name: None)
@@ -248,7 +252,11 @@ class TestBashFreeLaunch:
         spec = SimulationSpec(
             name="win2",
             backend="mock",
-            case=HeatedPipeCase(reynolds=500, turbulence_model="laminar"),
+            case=HeatedPipeCase(
+                reynolds=500,
+                turbulence_model="laminar",
+                fluid=FLUID_PRESETS["unit_prandtl_liquid"],
+            ),
         )
         out = run_workflow(rt, spec=spec.model_dump(mode="json"), workdir=str(tmp_path / "w"))
         assert out["status"] == "success", out.get("error")

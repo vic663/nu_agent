@@ -1,0 +1,30 @@
+# NEGATIVE CONTROL — the run converges cleanly and the answer is still wrong.
+#
+# k-omega SST predicts a d-type cavity flow in a p/e = 10 ribbed passage: no reattachment between
+# the ribs, and Nu and f roughly 50-55 % below Webb et al. (1971).  Nothing about the *execution*
+# fails, so an execution-success metric records this as a success.  The workflow must reject it on
+# the physics: validation against Webb must FAIL and the critique verdict must be `reject`.
+task: >
+  Air at Re = 20000 through a rib-roughened cooling tube (e/D = 0.04, p/e = 10) with the k-omega SST
+  closure; validate Nu and f against Webb.
+spec:
+  name: eval-nc-wrong-closure
+  backend: mock
+  case:
+    kind: ribbed_tube
+    fluid: {name: air_300K, rho: 1.1614, mu: 1.846e-5, cp: 1007.0, k: 0.0263, mol_weight: 28.96}
+    diameter: 0.02
+    reynolds: 20000
+    wall_heat_flux: 2.0e3
+    turbulence_model: kOmegaSST
+    rib_height_over_diameter: 0.04
+    rib_pitch_over_height: 10
+    n_ribs: 10
+  validation:
+    references:
+      - {quantity: Nu, source: webb, tolerance: 0.20}
+      - {quantity: f, source: webb, tolerance: 0.15}
+expect:
+  outcome: fail
+  validation_passed: false
+  critique_verdict: reject

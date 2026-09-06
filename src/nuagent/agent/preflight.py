@@ -86,12 +86,38 @@ def preflight(spec: SimulationSpec) -> PreflightReview:
             x_eval = (1.0 - case.developed_fraction) * case.length
             l_hyd = corr.entry_length_hydrodynamic(case.reynolds, case.diameter)
             l_th = corr.entry_length_thermal(case.reynolds, case.fluid.pr, case.diameter)
-            if x_eval < max(l_hyd, l_th):
+            l_dev = max(l_hyd, l_th)
+            detail = (
+                f"entry length ~{l_dev / case.diameter:.1f} D (hydrodynamic "
+                f"{l_hyd / case.diameter:.1f} D, thermal {l_th / case.diameter:.1f} D)"
+            )
+            developed_refs = {
+                "laminar",
+                "gnielinski",
+                "dittus_boelter",
+                "petukhov",
+                "blasius",
+                "prandtl_karman",
+            }
+            validates_developed = (
+                any(ref.source in developed_refs for ref in spec.validation.references)
+                or not spec.validation.references
+            )
+            if l_dev > case.length and validates_developed:
+                # The flow never becomes fully developed anywhere in the domain, so the
+                # fully-developed correlations this case is scored against are unreachable by
+                # construction.  Blocking: no amount of mesh refinement or extra iterations fixes
+                # a geometry that is too short.
+                r.blocking.append(
+                    f"the pipe is {case.length_over_diameter:.0f} D long but the flow needs "
+                    f"{l_dev / case.diameter:.0f} D to become fully developed ({detail}); a "
+                    "fully-developed correlation cannot be validated in this geometry — lengthen "
+                    "the pipe, lower Re or Pr, or validate against a developing-flow reference"
+                )
+            elif x_eval < l_dev:
                 r.warnings.append(
-                    f"evaluation region starts at x = {x_eval / case.diameter:.1f} D but the entry length is "
-                    f"~{max(l_hyd, l_th) / case.diameter:.1f} D (hydrodynamic {l_hyd / case.diameter:.1f} D, "
-                    f"thermal {l_th / case.diameter:.1f} D): increase length_over_diameter or "
-                    "decrease developed_fraction"
+                    f"evaluation region starts at x = {x_eval / case.diameter:.1f} D but the "
+                    f"{detail}: increase length_over_diameter or decrease developed_fraction"
                 )
 
         # ---- lessons learned: closures for rib-roughened passages ---------------------------

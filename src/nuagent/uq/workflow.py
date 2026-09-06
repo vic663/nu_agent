@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,7 @@ def run_uq_for_spec(spec: SimulationSpec, outdir: Path, seed: int = 0) -> dict[s
     qois = uq.qois or default_qois
 
     results: dict[str, Any] = {}
+    fn: Callable[..., float]
     for q in qois:
         if q == "T_peak":
             fn = lambda y, x=x: float(x[int(np.argmax(y))])  # noqa: E731

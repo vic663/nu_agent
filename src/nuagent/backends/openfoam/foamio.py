@@ -66,7 +66,7 @@ def _parse_field_value(text: str, start: int) -> np.ndarray | float | None:
         return float(sm.group(1)) if sm else None
     # 'List<type>' is omitted for zero-length lists, which are written as 'nonuniform 0();'
     lm = re.compile(r"(List<\w+>)?\s*").match(text, m.end())
-    arr, _ = _parse_list_block(text, lm.end())
+    arr, _ = _parse_list_block(text, lm.end() if lm else m.end())
     return arr
 
 
@@ -194,6 +194,11 @@ class PolyMesh:
         text = self._text("faces")
         hdr_end = text.find("}") + 1
         m = re.compile(r"\s*(\d+)\s*\(").search(text, hdr_end)
+        if m is None:
+            raise ValueError(
+                "constant/polyMesh/faces has no face-count header; the mesh is missing or is "
+                "written in binary format (NuAgent's reader is ASCII-only)"
+            )
         n = int(m.group(1))
         body_start = m.end()
         # each face: k(a b c ...)

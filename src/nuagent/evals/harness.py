@@ -75,6 +75,31 @@ def grade_plan(planned: SimulationSpec, reference: SimulationSpec) -> dict[str, 
 
 
 def task_success(row: dict[str, Any]) -> bool:
+    """Did the agent do the right thing on this task?
+
+    For an ordinary task that means producing a converged, in-range solution.  For a **negative
+    control** (``expect.outcome: fail``) it means the opposite: the workflow had to *detect* a
+    deliberately defective set-up rather than return a confident answer.  A qualification suite
+    whose only possible outcome is "pass" qualifies nothing, so the two are graded together.
+    """
+    expect = row.get("expect") or {}
+    if expect.get("outcome") == "fail":
+        if expect.get("blocked_by_preflight") and not row.get("blocked_by_preflight"):
+            return False
+        if expect.get("validation_passed") is False and row.get("validated"):
+            return False
+        if (
+            expect.get("critique_verdict")
+            and row.get("critique_verdict") != expect["critique_verdict"]
+        ):
+            return False
+        # the defect must have been caught somewhere: a block, a failed validation, or a rejection
+        return bool(
+            row.get("blocked_by_preflight")
+            or not row.get("validated")
+            or row.get("critique_verdict") == "reject"
+            or row["status"] == "failed"
+        )
     return bool(
         row["status"] in ("success", "completed_with_issues")
         and row["expected_ranges_ok"]
@@ -116,9 +141,13 @@ def run_task(task: dict[str, Any], rt: Runtime, outdir: Path, repeat: int = 0) -
     gci = result.get("verification", {}).get("gci", {})
     gci_ok = bool(gci) and all(g.get("convergence") == "monotonic" for g in gci.values())
     critique = result.get("critique", {}) or {}
+    preflight = result.get("preflight") or {}
     row = {
         "task": task["_file"],
         "repeat": repeat,
+        "expect": expect,
+        "negative_control": expect.get("outcome") == "fail",
+        "blocked_by_preflight": bool(preflight.get("blocking")),
         "status": result.get("status"),
         "attempts": result.get("attempt", 0),
         "validated": bool(result.get("validation", {}).get("passed")),
@@ -128,7 +157,8 @@ def run_task(task: dict[str, Any], rt: Runtime, outdir: Path, repeat: int = 0) -
         "attempts_ok": (result.get("attempt", 0) <= expect["max_attempts"])
         if expect.get("max_attempts")
         else True,
-        "preflight_warnings": len((result.get("preflight") or {}).get("warnings", [])),
+        "preflight_warnings": len(preflight.get("warnings", [])),
+        "preflight_blocking": list(preflight.get("blocking", [])),
         "critique_verdict": critique.get("verdict"),
         "expected_warning_found": (
             any(expect["critique_warning_contains"] in w for w in critique.get("warnings", []))

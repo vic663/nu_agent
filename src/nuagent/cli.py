@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -32,7 +34,7 @@ from nuagent import __version__
 app = typer.Typer(
     add_completion=False,
     no_args_is_help=True,
-    help="NuAgent — agentic V&V workflow for nuclear thermal-hydraulics and tritium transport",
+    help="NuAgent — agentic V&V workflow for convective heat-transfer and transport simulations",
 )
 console = Console()
 
@@ -63,7 +65,7 @@ def _runtime(backend: str, executor: str, policy: str, model: str | None):
     return Runtime(backend=get_backend(backend), executor=get_executor(executor), policy=pol)
 
 
-def _print_summary(result: dict) -> None:
+def _print_summary(result: Mapping[str, Any]) -> None:
     status = result.get("status", "?")
     color = {
         "success": "green",
@@ -275,23 +277,51 @@ def eval_cmd(
     rt = _runtime(backend, "local", policy, model)
     scoreboard = run_suite(tasks, rt, out, repeats=repeats)
     t = Table(title=f"Eval suite — backend={backend} policy={policy} repeats={repeats}")
-    for c in ("task", "rep", "status", "attempts", "validated", "GCI ok", "review", "wall [s]"):
+    for c in (
+        "task",
+        "kind",
+        "rep",
+        "status",
+        "attempts",
+        "validated",
+        "GCI ok",
+        "review",
+        "ok?",
+        "wall [s]",
+    ):
         t.add_column(c)
+    n_neg = 0
     for r in scoreboard["tasks"]:
+        neg = r.get("negative_control")
+        n_neg += bool(neg)
         t.add_row(
             r["task"],
+            "[yellow]neg. control[/]" if neg else "normal",
             str(r["repeat"]),
             r["status"],
             str(r["attempts"]),
             "yes" if r["validated"] else "no",
             "yes" if r["gci_ok"] else "no",
             str(r.get("critique_verdict") or "-"),
+            "[green]PASS[/]" if r.get("success") else "[red]FAIL[/]",
             f"{r['wall_time_s']:.1f}",
         )
     console.print(t)
     console.print(
-        f"success rate: [bold]{scoreboard['success_rate']:.0%}[/]  validated: {scoreboard['validation_rate']:.0%}  mean attempts: {scoreboard['mean_attempts']:.2f}"
+        f"agent behaved correctly on: [bold]{scoreboard['success_rate']:.0%}[/] of tasks  "
+        f"(validated: {scoreboard['validation_rate']:.0%}  mean attempts: {scoreboard['mean_attempts']:.2f})"
     )
+    if n_neg:
+        console.print(
+            f"[dim]{n_neg} of {len(scoreboard['tasks'])} task(s) are negative controls: a defective "
+            "set-up that the workflow is required to refuse. For those, 'failed'/'not validated' is "
+            "the correct outcome, and the 'ok?' column is the grade.[/]"
+        )
+    else:
+        console.print(
+            "[yellow]no negative controls in this suite: a success rate measured only on tasks that "
+            "are supposed to succeed cannot detect a wrong answer.[/]"
+        )
     if repeats > 1:
         console.print(
             "pass^k: " + "  ".join(f"k={k}: {v:.2f}" for k, v in scoreboard["pass_hat_k"].items())

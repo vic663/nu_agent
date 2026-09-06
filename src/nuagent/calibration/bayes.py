@@ -121,7 +121,9 @@ class BayesianCalibrator:
         self.n_eval += 1
         if y.shape != self.y_obs.shape or not np.all(np.isfinite(y)):
             return -np.inf
-        sigma = 10.0 ** theta[-1] * self.scale if self.infer_noise else self.sigma
+        sigma = np.asarray(
+            10.0 ** theta[-1] * self.scale if self.infer_noise else self.sigma, dtype=float
+        )
         r = (self.y_obs - y) / sigma
         return float(-0.5 * np.sum(r**2 + np.log(2.0 * np.pi * sigma**2)))
 
@@ -169,6 +171,7 @@ class BayesianCalibrator:
                 "q50": float(q50),
                 "q95": float(q95),
             }
+        noise: dict[str, float] | float
         if self.infer_noise:
             sig = 10.0 ** chain[:, -1] * self.scale
             noise = {

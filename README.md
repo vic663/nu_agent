@@ -30,28 +30,48 @@ backbone with typed contracts, an independent **verifier** that reviews every pl
 and **orchestrator–workers** fan-out where sub-tasks are independent solver runs — not a conversation
 between role-playing agents.
 
-## What it does today (v0.1)
+## What it does today (v0.1.4)
 
 | Capability | Status |
 |---|---|
 | Typed simulation specs (Pydantic) as the only interface between LLM and solvers | ✅ |
 | OpenFOAM backend: axisymmetric heated pipe, laminar & RANS (k-ω SST, k-ε family), template-generated, y⁺-targeted meshing | ✅ tested on OpenFOAM v1912, targets v2312–v2512 |
 | **Rib-roughened cooling tube** (turbine-blade turbulator / AGR cladding analogue): multi-block mesh, module-averaged Nu & f, Webb–Eckert–Goldstein validation, reattachment diagnostic | ✅ real runs; SST model-form failure detected automatically |
-| Continue-from-latest-time for stalled runs, idempotent case reuse | ✅ |
+| Continue-from-latest-time for stalled runs, idempotent case reuse | ✅ reuse identity includes the template code and the NuAgent version, and refuses a case whose previous run did not converge |
 | **Pre-flight review** node: correlation validity at the operating point, y⁺ vs wall treatment, entry length, closure lessons, FESTIM time scales — blocking findings stop the run before build | ✅ rules; LLM may add findings, never remove |
 | **Closure ensemble** (`model_form`): re-runs the base grid with alternative RANS closures (optionally in parallel) and reports model-form uncertainty next to the GCI, with per-closure reattachment diagnostics | ✅ |
 | FESTIM 2.x backend: 1-D tritium permeation (with McNabb–Foster traps) and TDS | ✅ generated & post-processed; solver run in the FESTIM container |
 | Mock backend with controlled discretisation error for CI and agent evals | ✅ |
-| Live convergence monitor (stops OpenFOAM early once *physically meaningful* residuals converge) | ✅ |
+| Live convergence monitor (stops OpenFOAM early once *physically meaningful* residuals converge) | ✅ the residual criterion is the live stop signal; the *verdict* additionally requires a clean termination and a zero exit status |
 | Diagnose-and-retry loop with whitelisted, bounded numerics changes | ✅ rules policy; LLM policy with rule fallback |
-| Solution verification: 3-level grid study, Richardson extrapolation, GCI (Celik 2008 / ASME V&V 20) | ✅ |
+| Solution verification: 3-level grid study, Richardson extrapolation, GCI (Celik 2008 / ASME V&V 20) | ✅ the y⁺ target is anchored to the *coarsest* level so every level stays in one near-wall regime, and the report states whether the realised family is a systematic refinement |
 | Validation against exact solutions and correlations with their own uncertainty bands | ✅ |
 | Bayesian calibration (emcee) with reduced-order models and GP surrogates | ✅ |
 | Sobol sensitivity analysis (SALib) | ✅ |
 | Markdown report with plots, decision log and provenance (git hash, versions, digests) | ✅ |
-| Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ |
-| Agent qualification suite (`nuagent eval`, `--repeats` for τ-bench **pass^k** reliability) | ✅ 7 tasks, 100 % success / 100 % validated, pass^2 = 1.0 (rules policy, mock backend) |
+| Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ the gate discloses the whole job budget (solve attempts + grid levels + ensemble members) and covers every child submission, not only the first |
+| Agent qualification suite (`nuagent eval`, `--repeats` for τ-bench **pass^k** reliability) | ✅ 10 tasks — 7 that must succeed and **3 negative controls that must be refused**; the agent behaves correctly on 10/10 (rules policy, mock backend). See the note below for what this does and does not measure |
 | LLM planning from natural language (`nuagent ask`) — Anthropic, OpenAI, or any OpenAI-compatible local server | ✅ |
+
+> **What the eval suite does and does not measure.** The mock backend generates each QoI from the
+> same correlation the validation node then compares it against, plus a deterministic `C·h²` term
+> and a per-closure bias factor. On the seven positive tasks its observed order is therefore 2.000
+> by construction and its validation deviation is a fixed fraction: those tasks exercise the graph,
+> the retry logic, the GCI arithmetic and the report, and they *cannot* fail on physics. A success
+> rate measured only on tasks that are supposed to succeed is not evidence that the agent would
+> catch a wrong answer, so the suite also carries **three negative controls that must be refused**:
+>
+> | Negative control | Defect | Required behaviour |
+> |---|---|---|
+> | `08_negative_control_no_traps` | TDS spectrum with no traps defined | pre-flight **blocks** before meshing |
+> | `09_negative_control_entry_length` | Re = 800 water validated against fully developed 48/11 in a 40 D pipe (entry length ~233 D) | pre-flight **blocks**: the target is unreachable in this geometry |
+> | `10_negative_control_wrong_closure` | k-ω SST on a p/e = 10 ribbed passage — converges cleanly, Nu and f ~50 % below Webb | run completes, **validation FAILS**, critique verdict `reject` |
+>
+> The third is the important one: nothing about its *execution* fails, so an execution-success
+> metric records it as a success. Control 09 is not hypothetical — it was task 04 of this suite
+> until 2026-09-06, and it scored `+0.50 % PASS` against a value the flow could not physically
+> reach. It is kept as a permanent regression test against that class of error. The physics
+> evidence in this repository remains the OpenFOAM table below, not the eval scoreboard.
 
 ### Results so far (real OpenFOAM runs, single core)
 
@@ -129,10 +149,12 @@ nuagent eval evals/tasks --backend mock --policy rules --repeats 3
 
 Everything shown above — every run, report, grid study, calibration and the qualification suite — was
 produced with the **rules policy, i.e. with zero LLM tokens**. The language model is optional and enters in
-exactly three places: planning a specification from natural language (`nuagent ask`), proposing numerics
-changes after a failed run, and adding remarks to the review. Each is a single structured-output call of
-roughly 5–15k tokens, so a full LLM-assisted run costs cents with a hosted model and nothing with a local
-one.
+exactly **four bounded judgement points**, each a single structured-output call: `plan` (a specification
+from natural language, `nuagent ask`), `review` (adding — never removing — pre-flight findings),
+`diagnose` (proposing whitelisted numerics changes after a failed run) and `critique` (remarks on the
+finished result). Each call is roughly 5–15k tokens, so a full LLM-assisted run costs cents with a hosted
+model and nothing with a local one. No LLM output reaches a solver, a shell or a file path except through
+a validated `SimulationSpec` or the bounded `Adjustments` schema.
 
 | Option | Setting | Notes |
 |---|---|---|

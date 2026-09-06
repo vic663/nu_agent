@@ -1,0 +1,26 @@
+# NEGATIVE CONTROL — the workflow must REFUSE this, not answer it.
+#
+# Re = 800 in water (Pr = 5.8) needs ~233 D to reach a fully developed thermal profile, but the pipe
+# is 40 D long.  Nu = 48/11 is unreachable anywhere in this geometry.  Before 2026-09-06 this exact
+# set-up ran to completion and scored "+0.50 % PASS" against 48/11 on the mock backend: the mock
+# generates its QoI from the same correlation the validator uses, so nothing in the pipeline could
+# notice.  Pre-flight must now block it.
+task: >
+  Laminar heated pipe at Re = 800 in water, 20 mm diameter, 40 diameters long; validate the
+  fully developed Nusselt number against 48/11.
+spec:
+  name: eval-nc-entry-length
+  backend: mock
+  case:
+    kind: heated_pipe
+    fluid: {name: water_300K, rho: 996.0, mu: 8.5e-4, cp: 4180.0, k: 0.61, mol_weight: 18.0}
+    diameter: 0.02
+    reynolds: 800
+    length_over_diameter: 40
+    turbulence_model: laminar
+  validation:
+    references:
+      - {quantity: Nu, source: laminar, tolerance: 0.03}
+expect:
+  outcome: fail
+  blocked_by_preflight: true

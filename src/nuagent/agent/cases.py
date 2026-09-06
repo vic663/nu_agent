@@ -15,8 +15,19 @@ def reusable_case(
     spec: SimulationSpec,
     adjustments: dict[str, Any] | None,
     refinement: float = 1.0,
+    backend: Any = None,
 ) -> CaseHandle | None:
-    """Return the existing case in ``case_dir`` if it was built from this exact spec and has run."""
+    """Return the existing case in ``case_dir`` only if it is safe to re-report its numbers.
+
+    Three conditions, all necessary:
+
+    1. the specification hash matches — and that hash now includes
+       :func:`~nuagent.backends.base.generator_fingerprint`, so a case built by different template
+       code or a different NuAgent version is *not* reused;
+    2. the run log exists;
+    3. when ``backend`` is given, the log parses as **converged**.  Without (3) a directory left by
+       a crashed or interrupted run is silently adopted and a synthetic ``rc=0`` recorded for it.
+    """
     meta = Path(case_dir) / "nuagent_case.json"
     if not meta.exists():
         return None
@@ -29,4 +40,12 @@ def reusable_case(
     if case.spec_hash != expected:
         return None
     log = case.path / case.metadata.get("log", "log.run")
-    return case if log.exists() else None
+    if not log.exists():
+        return None
+    if backend is not None:
+        try:
+            if not backend.parse_log(case).converged:
+                return None
+        except Exception:  # noqa: BLE001 - an unparseable log is not a reusable result
+            return None
+    return case

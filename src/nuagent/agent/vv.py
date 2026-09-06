@@ -34,11 +34,9 @@ def analytical_reference(spec: SimulationSpec, quantity: str) -> tuple[float, st
         return None
     if isinstance(case, PermeationCase):
         D = analytical.arrhenius(case.material.D_0, case.material.E_D, case.temperature)
-        d_eff = D
-        for tr in case.traps:
-            d_eff = analytical.effective_diffusivity_from_trap(
-                d_eff, case.temperature, tr.k_0, tr.E_k, tr.p_0, tr.E_p, tr.n
-            )
+        # Trap retardation factors add in the denominator; applying the single-trap formula
+        # once per trap would multiply them instead.  See analytical.effective_diffusivity_multitrap.
+        d_eff = analytical.effective_diffusivity_multitrap(D, case.temperature, case.traps)
         if quantity == "permeation_flux_ss":
             return analytical.permeation_steady_flux(
                 D, case.upstream_concentration, case.thickness

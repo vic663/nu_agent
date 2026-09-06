@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nuagent"
-version = "0.1.0"
-description = "Agentic workflow for verified, validated and calibrated nuclear thermal-hydraulics (OpenFOAM) and tritium-transport (FESTIM) simulations"
+version = "0.1.4"
+description = "Agentic workflow for verified, validated and calibrated convective heat-transfer (OpenFOAM) and transport (FESTIM) simulations"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -23,7 +23,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Physics",
 ]
 dependencies = [
-  "numpy>=1.24",
+  "numpy>=2.0",  # np.trapezoid (festim/mock QoI extraction) was added in NumPy 2.0
   "scipy>=1.10",
   "pydantic>=2.5",
   "pydantic-settings>=2.0",
@@ -45,7 +45,7 @@ anthropic = ["langchain-anthropic>=1.0"]
 openai = ["langchain-openai>=1.0"]          # also covers OpenAI-compatible local servers (vLLM, Ollama)
 ollama = ["langchain-ollama>=1.0"]
 mcp = ["mcp>=1.2"]
-dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.5", "mypy>=1.8"]
+dev = ["pytest>=7.4", "pytest-cov>=4.1", "ruff>=0.5", "mypy>=1.8", "types-PyYAML>=6.0"]
 all = ["nuagent[anthropic,openai,ollama,mcp,dev]"]
 
 [project.scripts]
@@ -84,3 +84,7 @@ ignore = ["B008", "E501"]
 [tool.mypy]
 python_version = "3.10"
 ignore_missing_imports = true
+# NOTE: mypy is configured but not run in CI, and `mypy src/nuagent` is not clean.  Before adding
+# it to the CI matrix, enable the pydantic plugin (`plugins = ["pydantic.mypy"]`, which requires
+# mypy and pydantic in the same environment) — most of the outstanding errors are `call-arg` on
+# pydantic model constructors that the plugin understands.

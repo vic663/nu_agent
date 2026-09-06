@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -50,6 +51,13 @@ class CaseHandle:
 class ConvergenceReport:
     """What the log says about the run."""
 
+    # Three distinct states, deliberately not collapsed into one flag:
+    #   criterion_met  -- the residual target has been reached.  This is the *live* signal: it is
+    #                     what the monitor uses to ask a still-running solver to stop cleanly.
+    #   completed      -- the solver terminated cleanly (End marker / clean residualControl stop).
+    #   converged      -- the scientific verdict: criterion_met AND completed AND not diverged.
+    # A log that is truncated by an OOM kill or a wall-clock limit can satisfy `criterion_met`
+    # on its last written iteration; only `converged` may be used to accept a result.
     converged: bool
     diverged: bool
     completed: bool  # solver reached End / final time without error
@@ -59,6 +67,8 @@ class ConvergenceReport:
     bounding_events: int = 0
     reason: str = ""
     residual_history: dict[str, list[float]] = field(default_factory=dict)  # decimated for plotting
+    criterion_met: bool = False  # residual target reached (live-stop signal, not a verdict)
+    returncode: int | None = None  # exit status of the run, when the executor reported one
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -69,6 +79,10 @@ class ConvergenceReport:
             return "diverged"
         if self.converged:
             return "converged"
+        if self.criterion_met and not self.completed:
+            return "residuals_met_but_run_incomplete"
+        if self.returncode not in (None, 0):
+            return "nonzero_exit"
         if self.completed:
             return "completed_not_converged"
         return "failed"
@@ -112,14 +126,39 @@ class SolverBackend(Protocol):
     def extract_qois(self, case: CaseHandle, spec: SimulationSpec) -> QoIResult: ...
 
 
+@lru_cache(maxsize=1)
+def generator_fingerprint() -> str:
+    """Digest of the *code* that turns a specification into solver input files.
+
+    A specification hash alone is not a cache identity: editing a Jinja template or upgrading
+    NuAgent changes the generated dictionaries while leaving the spec untouched, so a stale case
+    would be reused and its old numbers re-reported under the new commit.  This folds the package
+    version and the contents of every shipped template into the identity.
+    """
+    h = hashlib.sha256()
+    h.update(_nuagent_version().encode())
+    root = Path(__file__).resolve().parent.parent  # src/nuagent
+    for f in sorted(root.rglob("*.j2")):
+        h.update(f.relative_to(root).as_posix().encode())
+        h.update(f.read_bytes())
+    return h.hexdigest()[:12]
+
+
+def _nuagent_version() -> str:
+    from nuagent import __version__
+
+    return __version__
+
+
 def spec_hash(spec: SimulationSpec, extra: dict[str, Any] | None = None) -> str:
     """Hash of everything that determines the solver input files (case physics/numerics, backend,
-    parallel decomposition) — *not* the V&V or reporting settings, so a case can be reused when only
-    the verification/validation plan changes."""
+    parallel decomposition, and the generator code itself) — *not* the V&V or reporting settings,
+    so a case can be reused when only the verification/validation plan changes."""
     payload = {
         "backend": spec.backend.value,
         "case": spec.case.model_dump(mode="json"),
         "n_procs": spec.execution.n_procs,
+        "generator": generator_fingerprint(),
     }
     if extra:
         payload["_extra"] = extra

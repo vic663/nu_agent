@@ -107,7 +107,7 @@ plan → review → build → approve → run → monitor → postprocess → ve
         report ← critique ← uq ← calibrate ←──────────────────────────────────────┘
 ```
 
-Three nodes may consult an LLM (`plan`, `review`, `diagnose`, `critique` — `review` and `critique` only
+Four nodes may consult an LLM (`plan`, `review`, `diagnose`, `critique` — `review` and `critique` only
 additively); everything else is deterministic code with a test suite. With the rules policy the whole graph
 runs without a language model, which is what makes A/B comparison of policies (and therefore
 qualification) possible.
