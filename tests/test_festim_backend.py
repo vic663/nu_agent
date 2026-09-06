@@ -97,7 +97,10 @@ class TestPostProcessing:
 @pytest.mark.festim
 class TestRealFESTIM:
     def test_permeation_matches_analytical(self, tmp_path):
-        spec = perm_spec(n_cells=200, n_steps=400)
+        # dt ~ 0.02 t_lag: the Daynes-Barrer time lag integrates the transient, so it is far more
+        # sensitive to the time step than the steady flux (400 steps, dt ~ 0.09 t_lag, came out
+        # 5.5 % low against the 5 % gate).
+        spec = perm_spec(n_cells=200, n_steps=1600)
         b = FESTIMBackend()
         h = b.build(spec, tmp_path / "real")
         proc = subprocess.run(["bash", str(h.allrun)], capture_output=True, text=True, timeout=1200)

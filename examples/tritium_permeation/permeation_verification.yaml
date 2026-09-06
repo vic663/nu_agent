@@ -12,7 +12,7 @@ case:
   temperature: 600.0
   upstream_concentration: 1.0e20
   n_cells: 200
-  n_steps: 400
+  n_steps: 1600  # ~44 steps per time lag; 400 (~11 per lag) left t_lag 5.5 % below the exact value
 verification: {mesh_study: true, refinement_ratio: 2.0, n_levels: 3}
 validation:
   references:
