@@ -115,6 +115,94 @@ class TestQualificationGrading:
         assert len(negatives) >= 3, f"only {len(negatives)} negative controls in {len(tasks)} tasks"
 
 
+class TestValidationFailsClosed:
+    """Only an explicit ``passed is True`` earns validation credit.
+
+    Absence of evidence is not evidence of validation: ASME V&V 20 defines validation as the
+    quantified comparison of a solution with referent data, so a comparison that was never formed
+    cannot support a positive claim.  These tests pin the *default*, not a reproducible escape
+    path — ``validate()`` writes ``passed: False`` on both of its error branches today, and this
+    is what stops a future writer of a validation record from failing open by omission.
+    """
+
+    def _spec(self):
+        from nuagent.spec import HeatedPipeCase
+
+        return SimulationSpec(name="fc", backend="mock", case=HeatedPipeCase(reynolds=20000))
+
+    def test_unevaluable_reference_cannot_be_treated_as_passed(self):
+        from nuagent.agent.policy import rules_critique
+
+        results = {
+            "validation": {
+                "results": {
+                    # intentionally no "passed" key at all
+                    "Nu": {"quantity": "Nu", "error": "reference unavailable"}
+                }
+            }
+        }
+        crit = rules_critique(self._spec(), results)
+        assert crit.verdict == "reject"
+        assert any("validation unevaluable for: Nu" in w for w in crit.warnings)
+
+    def test_none_is_not_a_pass(self):
+        from nuagent.agent.policy import rules_critique
+
+        results = {"validation": {"results": {"Nu": {"quantity": "Nu", "passed": None}}}}
+        assert rules_critique(self._spec(), results).verdict == "reject"
+
+    def test_failed_and_unevaluable_are_reported_separately(self):
+        from nuagent.agent.policy import rules_critique
+
+        results = {
+            "validation": {
+                "results": {
+                    # a comparison that ran and disagreed
+                    "Nu": {
+                        "quantity": "Nu",
+                        "passed": False,
+                        "relative_error": -0.5,
+                        "source": "webb",
+                        "tolerance": 0.2,
+                    },
+                    # a comparison that could not be formed
+                    "f": {"quantity": "f", "passed": False, "error": "no such reference"},
+                }
+            }
+        }
+        crit = rules_critique(self._spec(), results)
+        assert crit.verdict == "reject"
+        assert any(w.startswith("validation failed for: Nu") for w in crit.warnings)
+        assert any(w.startswith("validation unevaluable for: f") for w in crit.warnings)
+
+    def test_missing_dataset_file_is_a_structured_error_not_a_traceback(self, rt, tmp_path):
+        """`dataset:<path>` used to raise FileNotFoundError out of validate(); only KeyError was caught."""
+        from nuagent.spec import HeatedPipeCase
+
+        spec = SimulationSpec(
+            name="nodataset",
+            backend="mock",
+            case=HeatedPipeCase(reynolds=20000),
+            validation={
+                "references": [
+                    {
+                        "quantity": "Nu",
+                        "source": f"dataset:{tmp_path / 'does-not-exist.csv'}",
+                        "tolerance": 0.1,
+                    }
+                ]
+            },
+        )
+        out = run_workflow(rt, spec=spec.model_dump(mode="json"), workdir=str(tmp_path / "nd"))
+        row = out["validation"]["results"]["Nu"]
+        assert row["passed"] is False
+        assert "FileNotFoundError" in row["error"]
+        assert out["validation"]["passed"] is False
+        # a reference that could not be evaluated blocks certification
+        assert out["critique"]["verdict"] == "reject"
+        assert out["status"] == "failed"
+
+
 class TestWorkflowFileIsUsable:
     """The CI workflow was invalid YAML from the first commit, so no job had ever run."""
 

@@ -192,13 +192,26 @@ def rules_critique(spec: SimulationSpec, results: dict[str, Any]) -> Critique:
         from nuagent.agent.model_form import ensemble_warnings
 
         warnings.extend(ensemble_warnings(spec, results["model_form"]))
-    failed = [
-        q
-        for q, r in results.get("validation", {}).get("results", {}).items()
-        if not r.get("passed", True)
-    ]
-    if failed:
-        warnings.append(f"validation failed for: {', '.join(failed)}")
+    # Fail closed: only an explicit ``passed is True`` earns validation credit.  False, None and a
+    # missing key all count against the result, because absence of evidence is not evidence of
+    # validation — ASME V&V 20 defines validation as the *quantified comparison* of a solution with
+    # referent data, so a comparison that was never formed cannot support a positive claim.
+    val_results = results.get("validation", {}).get("results", {})
+    not_passed = {q: r for q, r in val_results.items() if r.get("passed") is not True}
+    # A comparison that ran and disagreed is a different scientific statement from a comparison
+    # that could not be formed at all; both block certification, and the report should say which.
+    compared = [q for q, r in not_passed.items() if "relative_error" in r]
+    unevaluable = [q for q, r in not_passed.items() if "relative_error" not in r]
+    failed = list(not_passed)
+    if compared:
+        warnings.append(f"validation failed for: {', '.join(compared)}")
+    if unevaluable:
+        warnings.append(
+            "validation unevaluable for: "
+            + ", ".join(
+                f"{q} ({not_passed[q].get('error', 'no comparison formed')})" for q in unevaluable
+            )
+        )
     # A PASS against a correlation evaluated outside its stated validity range is not a validation.
     out_of_range = [
         f"{q} vs {r.get('source', '?')}"

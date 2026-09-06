@@ -47,6 +47,25 @@ result that was not earned.
   **or** the critique rejected it, `success` only when validation passed, and the CLI exits 0 only
   for `success` (2 for `completed_with_issues`, 1 otherwise), so no script can treat an unvalidated
   run as a good one.
+- **Validation fails closed.** `rules_critique` used `r.get("passed", True)`: a validation record
+  that omitted the key would have been given credit. Both of `validate()`'s error branches do write
+  `passed: False`, so this was a latent fail-open default rather than a reproducible escape path —
+  which is exactly why it should not survive. The test is now `r.get("passed") is not True`, so
+  `False`, `None` and a missing key all block certification, and `validation.passed` uses the
+  symmetric `is True`. Absence of evidence is not evidence of validation: ASME V&V 20 defines
+  validation as the *quantified comparison* of a solution with referent data, so a comparison that
+  was never formed cannot support a positive claim.
+- **"Failed" and "unevaluable" are now reported as the different statements they are.** A
+  comparison that ran and disagreed (`validation failed for: …`) is a claim about the simulation;
+  a comparison that could not be formed (`validation unevaluable for: … (<reason>)`) is a claim
+  about the evidence. Both produce `reject` → `failed` → non-zero exit: NuAgent is not asserting
+  that the physics is wrong, it is refusing to certify a result whose required credibility
+  evidence was not obtained.
+- **Reference-resolution failures are structured records, not tracebacks.** `validate()` caught
+  only `KeyError`, so a `dataset:<path>` reference with a missing file raised `FileNotFoundError`
+  out of the node. It now catches `(KeyError, OSError, ValueError)` — the three expected
+  reference-resolution failures, deliberately not a broad `except Exception` — and records
+  `passed: False` with the exception type and message.
 - **Positive eval tasks must actually validate.** `task_success` accepted
   `status in ("success", "completed_with_issues")` without requiring `validated`, so a task whose
   QoIs landed in the expected range while validation failed and the critique rejected it still

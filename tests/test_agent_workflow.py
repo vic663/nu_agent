@@ -239,7 +239,19 @@ class TestPolicies:
             {
                 "qois": {"values": {}, "checks": {}},
                 "verification": {},
-                "validation": {"results": {"Nu": {"passed": False}}},
+                # a real comparison that ran and disagreed (a row with no relative_error and no
+                # error key is malformed, and is now classified as "unevaluable" instead)
+                "validation": {
+                    "results": {
+                        "Nu": {
+                            "quantity": "Nu",
+                            "passed": False,
+                            "relative_error": -0.42,
+                            "source": "gnielinski",
+                            "tolerance": 0.15,
+                        }
+                    }
+                },
             },
         )
         assert crit.verdict == "reject"  # rules verdict is authoritative

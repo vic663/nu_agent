@@ -691,15 +691,25 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                 continue
             try:
                 reference = reference_for(spec, ref)
-            except KeyError as exc:
-                results[key] = {"quantity": ref.quantity, "passed": False, "error": str(exc)}
+            except (KeyError, OSError, ValueError) as exc:
+                # KeyError: no such (quantity, source), or a missing geometry parameter.
+                # OSError: a `dataset:<path>` reference whose file is missing or unreadable.
+                # ValueError: a malformed dataset or an out-of-domain correlation argument.
+                # Deliberately not `except Exception`: only reference-resolution failures become a
+                # structured record, everything else is a bug and should surface as one.
+                results[key] = {
+                    "quantity": ref.quantity,
+                    "passed": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
                 continue
             g = gci.get(ref.quantity, {}).get("gci_fine")
             results[key] = {
                 "quantity": ref.quantity,
                 **compare(qois.values[ref.quantity], reference, ref.tolerance, g),
             }
-        all_passed = all(r.get("passed", False) for r in results.values()) if results else False
+        # symmetric with rules_critique: only an explicit True earns credit
+        all_passed = all(r.get("passed") is True for r in results.values()) if results else False
         summary = ", ".join(
             f"{q}: {r['relative_error'] * 100:+.1f}% vs {r['source']} ({'pass' if r['passed'] else 'FAIL'})"
             if "relative_error" in r
