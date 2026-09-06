@@ -797,8 +797,14 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
                     warnings=(state.get("critique") or {}).get("warnings", []),
                 )
             )
+        # the gate decision has to be in the state *before* the report is rendered, or the reader
+        # never sees why a converged, completed run was reported as failed
+        state_for_report = {
+            **dict(state),
+            "decisions": list(state.get("decisions") or []) + gate_decisions,
+        }
         try:
-            path = write_report(spec, dict(state), Path(state["workdir"]), status=status)
+            path = write_report(spec, state_for_report, Path(state["workdir"]), status=status)
         except Exception as exc:  # noqa: BLE001
             return {
                 "status": status,

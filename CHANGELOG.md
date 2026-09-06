@@ -124,6 +124,12 @@ result that was not earned.
   see the note in `pyproject.toml`.
 - Test fixtures that encoded the same unreachable-entry-length defect as task 04 now use a
   Prandtl-1 fluid or a longer pipe.
+- New `tests/test_release_gates.py`: regression tests for the gates whose absence let a
+  result be reported without being earned — a rejected critique must force `failed`, an
+  ordinary eval task must validate before it scores, the suite must contain negative
+  controls, the CI workflow must parse *and* trigger on the repository's actual branch, and
+  `CITATION.cff` must not carry a release date while the CHANGELOG says unreleased.
+  109 test functions / 114 runs, 110 passing and 4 solver-dependent skips.
 
 ### Known limitations (not closed in 0.1.4)
 
