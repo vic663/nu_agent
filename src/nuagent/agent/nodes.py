@@ -775,13 +775,28 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
         from nuagent.reporting.report import write_report
 
         spec = SimulationSpec.model_validate(state["spec"])
-        status = (
-            "failed"
-            if state.get("status") == "failed"
-            else (
-                "success" if state.get("validation", {}).get("passed") else "completed_with_issues"
+        # V&V and the physics critique are *gates*, not advisory annotations.  Previously the
+        # verdict was computed and then never consulted, so a run the critique had rejected still
+        # printed "Status: success" whenever validation happened to pass, and exited 0 either way.
+        verdict = (state.get("critique") or {}).get("verdict")
+        validation_passed = bool(state.get("validation", {}).get("passed"))
+        if state.get("status") == "failed" or verdict == "reject":
+            status = "failed"
+        elif validation_passed:
+            status = "success"
+        else:
+            status = "completed_with_issues"
+        gate_decisions = []
+        if verdict == "reject" and state.get("status") != "failed":
+            gate_decisions.append(
+                decision(
+                    "report",
+                    "physics critique rejected the result: reported as failed even though the run "
+                    "converged and completed",
+                    verdict=verdict,
+                    warnings=(state.get("critique") or {}).get("warnings", []),
+                )
             )
-        )
         try:
             path = write_report(spec, dict(state), Path(state["workdir"]), status=status)
         except Exception as exc:  # noqa: BLE001
@@ -792,7 +807,7 @@ def make_nodes(rt: Runtime) -> dict[str, Any]:
         return {
             "report_path": str(path),
             "status": status,
-            "decisions": [decision("report", f"report written to {path}")],
+            "decisions": gate_decisions + [decision("report", f"report written to {path}")],
         }
 
     return {

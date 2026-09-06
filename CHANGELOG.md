@@ -1,6 +1,10 @@
 # Changelog
 
-## 0.1.4 — 2026-09-07 — adversarial audit response
+## 0.1.4 — Unreleased — adversarial audit response
+
+> Release date is set when the `v0.1.4` tag is cut, after the three GitHub Actions jobs
+> (unit / OpenFOAM / FESTIM) have run green. `CITATION.cff`'s `date-released` is added at
+> the same moment. Until then this section is unreleased and nothing here claims otherwise.
 
 v0.1.3 was audited against the failure modes a V&V reviewer would use on a scientific CFD code:
 where can *execution success* masquerade as *physical credibility*, and where does the repository
@@ -35,6 +39,19 @@ result that was not earned.
   the reported y⁺ carries its uncertainty instead of a false point value.
 
 ### Honest verdicts
+
+- **The physics critique is now a gate, not an annotation.** `report` computed `critique.verdict`
+  and then never consulted it: a run the critique had *rejected* still printed `Status: success`
+  whenever validation happened to pass, and `nuagent run` exited 0 for `completed_with_issues` —
+  which is by definition `validation.passed == False`. Status is now `failed` when the run failed
+  **or** the critique rejected it, `success` only when validation passed, and the CLI exits 0 only
+  for `success` (2 for `completed_with_issues`, 1 otherwise), so no script can treat an unvalidated
+  run as a good one.
+- **Positive eval tasks must actually validate.** `task_success` accepted
+  `status in ("success", "completed_with_issues")` without requiring `validated`, so a task whose
+  QoIs landed in the expected range while validation failed and the critique rejected it still
+  scored a success — the exact failure this suite exists to detect. Ordinary tasks now require
+  `status == "success"`, `validated`, and a non-`reject` verdict.
 
 - **Convergence is now three states, not one.** `criterion_met` (residual target reached) is the
   live-stop signal the monitor uses; `converged` additionally requires `completed` *and* a zero

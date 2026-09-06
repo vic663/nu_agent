@@ -177,7 +177,9 @@ def run(
         auto_approve=auto_approve,
     )
     _print_summary(result)
-    raise typer.Exit(0 if result.get("status") in ("success", "completed_with_issues") else 1)
+    # 0 only for a validated result; 2 distinguishes "ran, but V&V did not clear it" from a hard
+    # failure, so a CI job or a shell script cannot treat an unvalidated run as a good one.
+    raise typer.Exit({"success": 0, "completed_with_issues": 2}.get(result.get("status"), 1))
 
 
 @app.command()

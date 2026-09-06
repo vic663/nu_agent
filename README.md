@@ -46,12 +46,17 @@ between role-playing agents.
 | Diagnose-and-retry loop with whitelisted, bounded numerics changes | ✅ rules policy; LLM policy with rule fallback |
 | Solution verification: 3-level grid study, Richardson extrapolation, GCI (Celik 2008 / ASME V&V 20) | ✅ the y⁺ target is anchored to the *coarsest* level so every level stays in one near-wall regime, and the report states whether the realised family is a systematic refinement |
 | Validation against exact solutions and correlations with their own uncertainty bands | ✅ |
-| Bayesian calibration (emcee) with reduced-order models and GP surrogates | ✅ |
-| Sobol sensitivity analysis (SALib) | ✅ |
+| Bayesian calibration (emcee) with reduced-order models and GP surrogates | ⚠ implemented; **convergence diagnostics pending** — `get_autocorr_time(tol=0)` disables emcee's own guard, there is no thinning or ESS, and the shipped TDS example is not converged |
+| Sobol sensitivity analysis (SALib) | ⚠ implemented; **failed-sample handling pending** — failed model evaluations are imputed with the sample mean and not reported, which biases the indices |
 | Markdown report with plots, decision log and provenance (git hash, versions, digests) | ✅ |
 | Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ the gate discloses the whole job budget (solve attempts + grid levels + ensemble members) and covers every child submission, not only the first |
 | Agent qualification suite (`nuagent eval`, `--repeats` for τ-bench **pass^k** reliability) | ✅ 10 tasks — 7 that must succeed and **3 negative controls that must be refused**; the agent behaves correctly on 10/10 (rules policy, mock backend). See the note below for what this does and does not measure |
 | LLM planning from natural language (`nuagent ask`) — Anthropic, OpenAI, or any OpenAI-compatible local server | ✅ |
+
+> **⚠ vs ✅ in the table above.** A ⚠ means the capability is implemented and exercised, but its
+> *qualification* is incomplete — implementation existing is not the same as the result being
+> trustworthy, and this repository's whole argument is that the difference matters. The open
+> items behind each ⚠ are listed in [CHANGELOG.md](CHANGELOG.md) under *Known limitations*.
 
 > **What the eval suite does and does not measure.** The mock backend generates each QoI from the
 > same correlation the validation node then compares it against, plus a deterministic `C·h²` term

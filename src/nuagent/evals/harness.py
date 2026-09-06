@@ -100,8 +100,14 @@ def task_success(row: dict[str, Any]) -> bool:
             or row.get("critique_verdict") == "reject"
             or row["status"] == "failed"
         )
+    # An ordinary task is only a success if the workflow produced a *credible* answer, not merely
+    # a finished one: a run whose QoIs happen to land in the expected range while validation fails
+    # and the critique rejects it is exactly the "execution success masquerading as physical
+    # credibility" failure this suite exists to detect.
     return bool(
-        row["status"] in ("success", "completed_with_issues")
+        row["status"] == "success"
+        and row["validated"]
+        and row.get("critique_verdict") != "reject"
         and row["expected_ranges_ok"]
         and row["attempts_ok"]
     )
