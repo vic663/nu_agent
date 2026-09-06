@@ -36,7 +36,7 @@ that loop, but a national-laboratory environment asks a harder question than "ca
 
 Each layer can be used without the ones above it: `physics` and `verification` are plain functions,
 `backends` build cases that can be run by hand, `executors` run any `Allrun`, and the agent is a thin
-orchestration on top. This is what makes the system testable (96 tests, of which 95 run in under three minutes with no solver).
+orchestration on top. This separation makes the system testable: the fast unit suite runs without external solvers, while OpenFOAM and FESTIM integration tests are marked and exercised separately in CI.
 
 ## 3. The specification as contract
 

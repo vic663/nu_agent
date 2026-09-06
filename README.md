@@ -6,7 +6,7 @@ reactor coolant channels (OpenFOAM), tritium transport in fusion materials (FEST
 V&V report.** The *Nu* is the Nusselt number, the quantity every case here is validated on (and ν, the
 kinematic viscosity); the physics is the same in an aircraft engine and in a reactor core.
 
-[![CI](https://github.com/<your-github-user>/nuagent/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-github-user>/nuagent/actions)
+[![CI](https://github.com/vic663/nuagent/actions/workflows/ci.yml/badge.svg)](https://github.com/vic663/nuagent/actions)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 NuAgent is built around one idea: **an AI agent that drives simulation codes must itself be qualifiable.**
@@ -119,7 +119,7 @@ execution-success metric would have reported the SST run as a success.
 (Step-by-step version with Windows/WSL2/Docker instructions: [`docs/tutorial.md`](docs/tutorial.md).)
 
 ```bash
-git clone https://github.com/<your-github-user>/nuagent && cd nuagent
+git clone https://github.com/vic663/nuagent && cd nuagent
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"            # add ,anthropic or ,openai for LLM planning
 

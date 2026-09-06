@@ -148,7 +148,7 @@ result that was not earned.
   ordinary eval task must validate before it scores, the suite must contain negative
   controls, the CI workflow must parse *and* trigger on the repository's actual branch, and
   `CITATION.cff` must not carry a release date while the CHANGELOG says unreleased.
-  109 test functions / 114 runs, 110 passing and 4 solver-dependent skips.
+  113 test functions / 118 collected cases, 114 passing and 4 solver-dependent skips.
 
 ### Known limitations (not closed in 0.1.4)
 

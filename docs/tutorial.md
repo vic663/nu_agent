@@ -239,9 +239,8 @@ If nothing is configured, `nuagent ask` prints exactly which variables to set in
 nuagent eval evals/tasks --backend mock --policy rules --repeats 3
 ```
 
-This runs the seven tasks three times each and prints a table plus `pass^k` — the probability that *all*
-k independent trials succeed (τ-bench). With the rules policy the numbers are 100 % and pass^3 = 1.0 by
-construction; the informative experiment is the same command with `--policy llm --model ...`, which
+This runs all ten tasks — seven positive tasks and three negative controls that must be refused — three times each and prints a table plus `pass^k`, the probability that *all*
+k independent trials are graded correctly (τ-bench). With the deterministic rules policy on the mock backend, 100 % and pass^3 = 1.0 are control-flow/qualification checks, not evidence of CFD accuracy; the informative model-comparison experiment is the same command with `--policy llm --model ...`, which
 answers "how reliable is the LLM planner, and how many attempts does it need?" Details are in
 `runs/evals/scoreboard.json` (`per_task`, `pass_hat_k`, `tasks`), and every task's full run directory sits
 beside it. Task 07 additionally checks that the critique attributes the SST closure's low Nu to the
