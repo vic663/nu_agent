@@ -228,11 +228,13 @@ examples/              ready-to-run specs (ribbed cooling tube with closure ense
                        permeation, TDS calibration)
 evals/tasks/           qualification tasks with expected outcomes
 docs/                  design, case catalogue, roadmap, publication plan, example reports
+website/               project website (React + Vite + Tailwind), published to GitHub Pages by .github/workflows/pages.yml
 docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
 ```
 
 ## Documentation
 
+- [Project website](https://vic663.github.io/nuagent/) — overview, capabilities, results and quick start (source in [`website/`](website/))
 - [Hands-on guide](docs/tutorial.md) — install, first run, how to read a report, writing your own spec, OpenFOAM / FESTIM / LLM / SLURM set-up, qualification, troubleshooting
 - [Design and architecture](docs/design.md) — state machine, guardrails, qualification strategy
 - [Case catalogue](docs/case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)

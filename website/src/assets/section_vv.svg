@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0c4a6e"/>
+      <stop offset="1" stop-color="#0369a1"/>
+    </linearGradient>
+    <pattern id="g1" width="96" height="96" patternUnits="userSpaceOnUse">
+      <path d="M96 0H0V96" fill="none" stroke="#bae6fd" stroke-opacity="0.55" stroke-width="1.5"/>
+    </pattern>
+    <pattern id="g2" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#bae6fd" stroke-opacity="0.55" stroke-width="1.2"/>
+    </pattern>
+    <pattern id="g3" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#bae6fd" stroke-opacity="0.55" stroke-width="1"/>
+    </pattern>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <g stroke="#bae6fd" stroke-opacity="0.8" stroke-width="2">
+    <rect x="120" y="300" width="480" height="480" fill="url(#g1)"/>
+    <rect x="720" y="300" width="480" height="480" fill="url(#g2)"/>
+    <rect x="1320" y="300" width="480" height="480" fill="url(#g3)"/>
+  </g>
+  <g font-family="Lato, Arial, sans-serif" font-size="30" text-anchor="middle" fill="#e0f2fe" fill-opacity="0.85">
+    <text x="360" y="840">coarse : h</text>
+    <text x="960" y="840">medium : h / 2</text>
+    <text x="1560" y="840">fine : h / 4</text>
+  </g>
+  <g fill="none" stroke-linecap="round">
+    <path d="M200 200 L 1720 200" stroke="#fb923c" stroke-opacity="0.7" stroke-width="2" stroke-dasharray="10 10"/>
+    <path d="M360 120 L 960 178 L 1560 196" stroke="#e0f2fe" stroke-opacity="0.7" stroke-width="3"/>
+  </g>
+  <g fill="#e0f2fe">
+    <circle cx="360" cy="120" r="7"/>
+    <circle cx="960" cy="178" r="7"/>
+    <circle cx="1560" cy="196" r="7"/>
+  </g>
+  <text x="1730" y="190" font-family="Lato, Arial, sans-serif" font-size="22" text-anchor="end" fill="#fb923c" fill-opacity="0.9">Richardson extrapolation</text>
+</svg>

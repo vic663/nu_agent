@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f0f9ff"/>
+      <stop offset="1" stop-color="#e0f2fe"/>
+    </linearGradient>
+    <pattern id="dots" width="32" height="32" patternUnits="userSpaceOnUse">
+      <circle cx="16" cy="16" r="1.5" fill="#0369a1" fill-opacity="0.14"/>
+    </pattern>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#bg)"/>
+  <rect width="1920" height="1080" fill="url(#dots)"/>
+  <g stroke="#0369a1" stroke-opacity="0.4" stroke-width="4" fill="none">
+    <path d="M160 540H1760"/>
+    <path d="M960 506 C 960 340, 560 340, 560 506" stroke-dasharray="10 12"/>
+    <path d="M360 574 C 360 800, 1760 800, 1760 574" stroke-dasharray="4 10" stroke-opacity="0.25"/>
+  </g>
+  <g fill="#ffffff" stroke="#0369a1" stroke-opacity="0.7" stroke-width="4">
+    <circle cx="160" cy="540" r="34"/>
+    <circle cx="360" cy="540" r="34" stroke="#f97316"/>
+    <circle cx="560" cy="540" r="34"/>
+    <circle cx="760" cy="540" r="34"/>
+    <circle cx="960" cy="540" r="34"/>
+    <circle cx="1160" cy="540" r="34"/>
+    <circle cx="1360" cy="540" r="34"/>
+    <circle cx="1560" cy="540" r="34" stroke="#f97316"/>
+    <circle cx="1760" cy="540" r="34"/>
+  </g>
+  <g font-family="Lato, Arial, sans-serif" font-size="26" text-anchor="middle" fill="#0369a1" fill-opacity="0.85">
+    <text x="160" y="612">plan</text>
+    <text x="360" y="612">review</text>
+    <text x="560" y="612">build</text>
+    <text x="760" y="612">run</text>
+    <text x="960" y="612">monitor</text>
+    <text x="1160" y="612">verify</text>
+    <text x="1360" y="612">validate</text>
+    <text x="1560" y="612">critique</text>
+    <text x="1760" y="612">report</text>
+    <text x="760" y="372" font-size="22" fill-opacity="0.6">diagnose (bounded retries)</text>
+  </g>
+</svg>
