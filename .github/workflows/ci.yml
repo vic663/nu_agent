@@ -66,3 +66,12 @@ jobs:
       - run: nuagent run examples/tritium_permeation/permeation_verification.yaml --workdir runs/permeation
       - uses: actions/upload-artifact@v4
         with: {name: permeation-report, path: runs/permeation/report.md}
+      - name: solver-tolerance study (200 cells / 400 steps; atol/rtol A/B/C)
+        # Diagnostic, not a gate: FESTIM's convergence test accepts ||F|| < atol at iteration 0, before
+        # any update, so the runner's atol=1e10 may freeze the solution mid-transient. The table it
+        # prints separates that from the (now fixed) time-lag quadrature bias.
+        continue-on-error: true
+        run: python3 scripts/festim_tolerance_study.py --out runs/festim_study
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: festim-tolerance-study, path: runs/festim_study/summary.*}

@@ -170,6 +170,55 @@ def build_tds(p: dict):
     return model, exports
 
 
+def run_with_snes_stats(model) -> dict:
+    """Time-step the model exactly as ``model.run()`` does, recording per step how many Newton
+    iterations the PETSc SNES took, why it stopped and the final residual norm.
+
+    FESTIM's convergence test declares CONVERGED_FNORM_ABS as soon as ||F|| < atol -- also at
+    iteration 0, before any update -- so a loose absolute tolerance can silently freeze the solution
+    while the transient is still evolving.  A run that hits that shows up here as steps with zero
+    iterations; ``first_zero_iteration_time`` says when the freeze began.  Diagnostics are
+    best-effort: any failure to read the SNES leaves the physics untouched and marks them
+    unavailable.
+    """
+    iterations: list[int] = []
+    reasons: list[int] = []
+    residuals: list[float] = []
+    times: list[float] = []
+    available = True
+    while model.t.value < model.settings.final_time:
+        model.iterate()
+        if available:
+            try:
+                snes = model.solver.solver
+                iterations.append(int(snes.getIterationNumber()))
+                reasons.append(int(snes.getConvergedReason()))
+                residuals.append(float(snes.getFunctionNorm()))
+                times.append(float(model.t.value))
+            except Exception:  # noqa: BLE001 - diagnostics must never fail a run
+                available = False
+    if not available or not iterations:
+        return {"available": False}
+    zero = [i for i, n in enumerate(iterations) if n == 0]
+    reason_counts: dict[str, int] = {}
+    # PETSc SNESConvergedReason codes: 2 FNORM_ABS, 3 FNORM_RELATIVE, 4 SNORM_RELATIVE
+    for r in reasons:
+        reason_counts[str(r)] = reason_counts.get(str(r), 0) + 1
+    return {
+        "available": True,
+        "steps": len(iterations),
+        "iterations_min": min(iterations),
+        "iterations_max": max(iterations),
+        "iterations_mean": sum(iterations) / len(iterations),
+        "zero_iteration_steps": len(zero),
+        "first_zero_iteration_time": times[zero[0]] if zero else None,
+        "converged_reasons": reason_counts,
+        "residual_norm_final": residuals[-1],
+        "residual_norm_min": min(residuals),
+        "residual_norm_max": max(residuals),
+    }
+
+
 def main(case_dir: Path) -> int:
     params = json.loads((case_dir / "params.json").read_text())
     info = {"status": "failed", "kind": params["kind"], "started": time.time()}
@@ -182,7 +231,7 @@ def main(case_dir: Path) -> int:
         model.show_progress_bar = False
         model.initialise()
         t0 = time.time()
-        model.run()
+        info["snes"] = run_with_snes_stats(model)
         info["wall_time_s"] = time.time() - t0
         info["n_steps"] = len(next(iter(exports.values())).t)
 
