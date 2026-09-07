@@ -1,6 +1,6 @@
 name: Website
 
-# Builds website/ with Vite and publishes it to GitHub Pages at https://vic663.github.io/nuagent/.
+# Builds website/ with Vite and publishes it to GitHub Pages at https://vic663.github.io/nu_agent/.
 # One-time setup in the repository: Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 
 on:
@@ -36,11 +36,11 @@ jobs:
           cache-dependency-path: website/package-lock.json
       - run: npm ci
       - run: npm run lint
-      # The site is served from https://vic663.github.io/nuagent/, so every asset URL needs that prefix.
+      # The site is served from https://vic663.github.io/nu_agent/, so every asset URL needs that prefix.
       # `npm run build` alone stays root-based for local preview and for hosts like Vercel.
       - run: npm run build:pages
       # GitHub Pages has no SPA rewrite rule. Serving index.html as the 404 page lets a deep link
-      # such as /nuagent/Results load the app, which then routes client-side.
+      # such as /nu_agent/Results load the app, which then routes client-side.
       - run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v5
         with:

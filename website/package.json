@@ -9,10 +9,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:pages": "vite build --base=/nuagent/",
+    "build:pages": "vite build --base=/nu_agent/",
     "lint": "eslint .",
     "preview": "vite preview",
-    "preview:pages": "vite preview --base=/nuagent/"
+    "preview:pages": "vite preview --base=/nu_agent/"
   },
   "dependencies": {
     "react": "^19.1.0",
