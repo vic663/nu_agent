@@ -46,6 +46,27 @@ exit $rc
 """
 
 
+def _right_endpoint_time_lag(t: np.ndarray, flux: np.ndarray, steady_flux: float) -> float:
+    """Daynes-Barrer time lag, integral of (J_ss - J) dt / J_ss, as a right-endpoint sum over the samples.
+
+    FESTIM exports the backward-Euler solution after each step, at t_1 = dt, ..., t_N, and writes no
+    t = 0 row.  For a backward-Euler discretisation of a linear problem the right-endpoint sum
+    sum_n (J_ss - J_n) (t_n - t_{n-1}) with t_0 = 0 equals the time integral of the semi-discrete
+    system *exactly*, for any step sequence: sum M (d_{n+1} - d_n) = dt_n K d_{n+1} from n = 0 and
+    use d_inf = 0.  The trapezoidal rule on the same samples is short by dt (d_1 + d_N) / 2, about
+    dt J_ss / 2, which is what made the 400-step tungsten verification case read 5 % low in the
+    first real-solver CI run.  Actual time stamps are used, so non-uniform steps are handled and a
+    leading t = 0 sample contributes a zero-width panel.  tests/test_time_lag_quadrature.py pins
+    this contract against the discrete identity itself.
+    """
+    t = np.asarray(t, dtype=float)
+    if steady_flux <= 0 or t.size == 0:
+        return math.nan
+    widths = np.diff(np.concatenate(([0.0], t)))
+    deficit = steady_flux - np.asarray(flux, dtype=float)
+    return float(np.sum(deficit * widths) / steady_flux)
+
+
 class FESTIMBackend:
     name = "festim"
 
@@ -167,8 +188,7 @@ class FESTIMBackend:
         if params["kind"] == "permeation":
             J = np.abs(data["flux_downstream"])
             j_ss = float(np.mean(J[int(0.9 * len(J)) :]))
-            # time lag: integral of (J_ss - J) dt / J_ss  (Daynes-Barrer)
-            t_lag = float(np.trapezoid(j_ss - J, t) / j_ss) if j_ss > 0 else math.nan
+            t_lag = _right_endpoint_time_lag(t, J, j_ss)  # Daynes-Barrer: int (J_ss - J) dt / J_ss
             L = params["thickness"]
             d_eff = L**2 / (6.0 * t_lag) if t_lag > 0 else math.nan
             checks = {}
