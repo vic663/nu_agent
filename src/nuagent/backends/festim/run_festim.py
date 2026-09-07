@@ -70,8 +70,13 @@ def build_permeation(p: dict):
     model.exports = [flux_down, flux_up, inventory]
 
     dt = p["final_time"] / p["n_steps"]
+    # atol bounds the assembled residual norm, and FESTIM's convergence test accepts it at
+    # iteration 0, before any Newton update: 1e10 froze the 1 mm tungsten / 600 K solution at
+    # 4.4 time lags (J_ss 0.27 % and the time lag 1 % low).  1e4 defers the freeze to 13 time
+    # lags, where the transient has decayed to ~1e-10, and stays four decades above the ~2.5
+    # round-off floor of this scaling (scripts/festim_tolerance_study.py; CI runs #3-#4).
     model.settings = F.Settings(
-        atol=p.get("atol", 1e10),
+        atol=p.get("atol", 1e4),
         rtol=p.get("rtol", 1e-10),
         max_iterations=30,
         final_time=p["final_time"],
@@ -154,6 +159,8 @@ def build_tds(p: dict):
     model.exports = list(exports.values())
 
     model.settings = F.Settings(
+        # kept at 1e10: the trapped, nonlinear residual scale has not been characterised the way
+        # the permeation case was (see the permeation settings above); scale-aware atol is P1
         atol=p.get("atol", 1e10),
         rtol=p.get("rtol", 1e-10),
         max_iterations=30,
