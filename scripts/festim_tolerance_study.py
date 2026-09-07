@@ -7,8 +7,14 @@ solution, the time lag the old trapezoidal extractor would have reported, and th
 recorded by run_festim.py (zero-iteration steps = the solution stopped being updated).
 
     A  atol=1e10  rtol=1e-10   current runner defaults
-    B  atol=1     rtol=1e-10   isolate the absolute tolerance
-    C  atol=1     rtol=1e-12   tighten both
+    B  atol=1e4   rtol=1e-10   isolate the absolute tolerance
+    C  atol=1e4   rtol=1e-12   tighten both
+    D  atol=1e6   rtol=1e-10   bracket: how loose can atol be before the freeze returns?
+
+atol must sit above the residual round-off floor: for this scaling (c ~ 1e20, ||K u|| ~ 4e15 in
+double precision) the post-solve residual norm bottoms out near 2.5, and CI run #3 showed that
+atol=1 makes every late step hit max_iterations (SNES error 91) because neither criterion can be
+met.  The floor is reported per run as ``residual_norm_min``.
 
 Reading the result:  A != B ~ C  -> the absolute tolerance is the culprit
                      A ~ B != C  -> the relative convergence criterion
@@ -33,8 +39,9 @@ from nuagent.spec import PermeationCase, SimulationSpec
 
 CASES = {
     "A": {"atol": 1e10, "rtol": 1e-10},
-    "B": {"atol": 1.0, "rtol": 1e-10},
-    "C": {"atol": 1.0, "rtol": 1e-12},
+    "B": {"atol": 1e4, "rtol": 1e-10},
+    "C": {"atol": 1e4, "rtol": 1e-12},
+    "D": {"atol": 1e6, "rtol": 1e-10},
 }
 REASONS = {
     "2": "FNORM_ABS",
@@ -99,13 +106,13 @@ def markdown(rows: list[dict], n_cells: int, n_steps: int) -> str:
         f"### FESTIM solver-tolerance study - {n_cells} cells / {n_steps} steps",
         "",
         "| case | atol | rtol | J_ss err | t_lag (right-endpoint) | err | t_lag (trapezoid, old) | err "
-        "| SNES it. mean | zero-it. steps | first freeze [t_lag] | reasons |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| SNES it. mean | zero-it. steps | first freeze [t_lag] | residual min..max | reasons |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
         if r.get("returncode", 1) != 0:
             lines.append(
-                f"| {r['case']} | {r['atol']:g} | {r['rtol']:g} | FAILED (rc={r['returncode']}) |||||||||"
+                f"| {r['case']} | {r['atol']:g} | {r['rtol']:g} | FAILED (rc={r['returncode']}) ||||||||||"
             )
             continue
         s = r["snes"]
@@ -120,13 +127,14 @@ def markdown(rows: list[dict], n_cells: int, n_steps: int) -> str:
             reasons = ", ".join(
                 f"{REASONS.get(k, k)}:{v}" for k, v in s["converged_reasons"].items()
             )
+            resid = f"{s['residual_norm_min']:.3g}..{s['residual_norm_max']:.3g}"
         else:
-            it = zero = first = reasons = "n/a"
+            it = zero = first = reasons = resid = "n/a"
         lines.append(
             f"| {r['case']} | {r['atol']:g} | {r['rtol']:g} | {100 * r['J_ss_error']:+.3f} % "
             f"| {r['time_lag']:.2f} s | {100 * r['time_lag_error']:+.3f} % "
             f"| {r['time_lag_trapezoid']:.2f} s | {100 * r['time_lag_trapezoid_error']:+.3f} % "
-            f"| {it} | {zero} | {first} | {reasons} |"
+            f"| {it} | {zero} | {first} | {resid} | {reasons} |"
         )
     return "\n".join(lines)
 
