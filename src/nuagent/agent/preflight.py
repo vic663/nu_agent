@@ -157,12 +157,21 @@ def preflight(spec: SimulationSpec) -> PreflightReview:
                 f"final_time = {case.final_time:.3g} s is shorter than 3 L^2/D = {3 * t_diff:.3g} s; the "
                 "steady permeation flux will not be reached"
             )
-        dt = (case.final_time or 6.0 * t_diff) / case.n_steps
-        if dt > 0.05 * t_diff / 6.0 * 6:  # ~ t_lag/20 with t_lag = L^2/6D
-            r.warnings.append(
-                f"time step {dt:.3g} s resolves the time lag L^2/6D = {t_diff / 6:.3g} s with fewer than "
-                "~20 steps; increase n_steps for an accurate time-lag verification"
-            )
+        # Transient-resolution heuristic for trapped (nonlinear) cases only.  For trap-free
+        # permeation the time lag is extracted exactly for any step size (right-endpoint sum over
+        # the backward-Euler samples; CI run #4: 400 steps -> 0.002 %), so step count is not an
+        # accuracy criterion there and must not read like one.  Advisory, never a gate.  The old
+        # form `0.05 * t_diff / 6.0 * 6` collapsed to 0.05 t_diff = 0.3 t_lag, six times looser
+        # than the t_lag / 20 it claimed.
+        if case.traps:
+            dt = (case.final_time or 6.0 * t_diff) / case.n_steps
+            t_lag = t_diff / 6.0
+            if dt > t_lag / 20.0:
+                r.warnings.append(
+                    f"transient resolution: time step {dt:.3g} s gives fewer than ~20 steps per "
+                    f"nominal diffusion time lag L^2/6D = {t_lag:.3g} s; a heuristic for resolving "
+                    "trapping transients, not a validation or accuracy criterion"
+                )
     if isinstance(case, TDSCase) and not case.traps:
         r.blocking.append("TDS case needs at least one trap")
 
