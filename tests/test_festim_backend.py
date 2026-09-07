@@ -112,3 +112,15 @@ class TestRealFESTIM:
         D = analytical.arrhenius(4.1e-7, 0.39, 600.0)
         assert q.values["permeation_flux_ss"] == pytest.approx(D * 1e20 / 1e-3, rel=0.005)
         assert q.values["time_lag"] == pytest.approx(1e-6 / (6 * D), rel=0.005)
+        # Qualification gate against premature zero-iteration convergence.  FESTIM's SNES
+        # convergence test accepts ||F|| < atol at iteration 0, before any update; with atol=1e10
+        # that froze this solution at 4.4 time lags.  The runner records per-step SNES statistics
+        # best-effort in production; here they are required (fail closed), because this test
+        # exists to prove the transient was never frozen.  A freeze may only begin once the
+        # slowest mode exp(-pi^2 D t / L^2) has decayed to ~2e-6, i.e. after 8 *analytical* time
+        # lags - the computed one would make the gate depend on the QoI under test.
+        snes = json.loads((h.path / "run_info.json").read_text())["snes"]
+        assert snes["available"] is True, snes
+        first_zero = snes["first_zero_iteration_time"]
+        assert first_zero is None or first_zero >= 8.0 * (1e-6 / (6 * D)), snes
+        assert all(int(code) > 0 for code in snes["converged_reasons"]), snes
