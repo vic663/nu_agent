@@ -12,10 +12,12 @@ case:
   temperature: 600.0
   upstream_concentration: 1.0e20
   n_cells: 200
-  n_steps: 1600  # ~44 steps per time lag; 400 (~11 per lag) left t_lag 5.5 % below the exact value
+  n_steps: 400  # qualified: right-endpoint time-lag extraction + atol=1e4 meet the exact solution to ~0.002 %
 verification: {mesh_study: true, refinement_ratio: 2.0, n_levels: 3}
 validation:
   references:
-    - {quantity: permeation_flux_ss, source: analytical, tolerance: 0.02}
-    - {quantity: time_lag, source: analytical, tolerance: 0.05}
+    # verification benchmark, not an engineering acceptance band: 0.5 % is ~200x the qualified
+    # error and still fails on the old extractor bias (-4.5 %) or a solver freeze (-1 %)
+    - {quantity: permeation_flux_ss, source: analytical, tolerance: 0.005}
+    - {quantity: time_lag, source: analytical, tolerance: 0.005}
 execution: {executor: local, max_attempts: 2, wallclock_minutes: 30}

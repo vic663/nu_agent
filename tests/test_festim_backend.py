@@ -97,10 +97,11 @@ class TestPostProcessing:
 @pytest.mark.festim
 class TestRealFESTIM:
     def test_permeation_matches_analytical(self, tmp_path):
-        # dt ~ 0.02 t_lag: the Daynes-Barrer time lag integrates the transient, so it is far more
-        # sensitive to the time step than the steady flux (400 steps, dt ~ 0.09 t_lag, came out
-        # 5.5 % low against the 5 % gate).
-        spec = perm_spec(n_cells=200, n_steps=1600)
+        # 200 cells / 400 steps is the qualified resolution: with the right-endpoint time-lag
+        # extraction and atol=1e4 the exact solution is met to ~0.002 % (CI run #4).  The 0.5 %
+        # gates below keep ~200x margin and still catch the old trapezoid bias (-4.5 %) or the
+        # iteration-0 freeze (-1.05 %) if either returns.
+        spec = perm_spec(n_cells=200, n_steps=400)
         b = FESTIMBackend()
         h = b.build(spec, tmp_path / "real")
         proc = subprocess.run(["bash", str(h.allrun)], capture_output=True, text=True, timeout=1200)
@@ -109,5 +110,5 @@ class TestRealFESTIM:
         assert rep.converged, rep.reason
         q = b.extract_qois(h, spec)
         D = analytical.arrhenius(4.1e-7, 0.39, 600.0)
-        assert q.values["permeation_flux_ss"] == pytest.approx(D * 1e20 / 1e-3, rel=0.02)
-        assert q.values["time_lag"] == pytest.approx(1e-6 / (6 * D), rel=0.05)
+        assert q.values["permeation_flux_ss"] == pytest.approx(D * 1e20 / 1e-3, rel=0.005)
+        assert q.values["time_lag"] == pytest.approx(1e-6 / (6 * D), rel=0.005)
