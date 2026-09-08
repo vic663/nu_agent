@@ -4,7 +4,7 @@
 # values give the enhancement ratios Nu/Nu0, f/f0 and the thermal-performance factor used in
 # cooling design.  Closure choice: k-omega SST predicts a single recirculation spanning the whole
 # inter-rib gap (d-type behaviour, f and Nu ~50-60 % low); the k-epsilon family reattaches at
-# 4-5 e as experiments do — see docs/case_catalogue.md for the model comparison.
+# x/e ≈ 3–5 across the tested cases (3.3 in the final twelve-rib Launder–Sharma run) — see docs/case_catalogue.md for the model comparison.
 # ~15 min on one core for the fine grid plus the two coarser levels of the grid study.
 name: ribbed-tube-air-Re20k
 description: >
