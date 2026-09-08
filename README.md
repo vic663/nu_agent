@@ -1,10 +1,6 @@
 # NuAgent
 
-**An agentic workflow that sets up, runs, monitors, verifies, validates and calibrates
-convective heat-transfer and transport simulations — turbine-blade cooling passages, heat-exchanger and
-reactor coolant channels (OpenFOAM), tritium transport in fusion materials (FESTIM) — and writes the
-V&V report.** The *Nu* is the Nusselt number, the quantity every case here is validated on (and ν, the
-kinematic viscosity); the physics is the same in an aircraft engine and in a reactor core.
+**NuAgent is a small, verification-gated agentic CFD demonstrator built around OpenFOAM — internal cooling and pipe flows today — with one qualified FESTIM second-backend path for trap-free hydrogen-isotope permeation. It writes the V&V report, including failed and rejected cases.**
 
 [![CI](https://github.com/vic663/nu_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/vic663/nu_agent/actions)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green)
@@ -237,8 +233,8 @@ docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
 - [Project website](https://vic663.github.io/nu_agent/) — overview, capabilities, results and quick start (source in [`website/`](website/))
 - [Hands-on guide](docs/tutorial.md) — install, first run, how to read a report, writing your own spec, OpenFOAM / FESTIM / LLM / SLURM set-up, qualification, troubleshooting
 - [Design and architecture](docs/design.md) — state machine, guardrails, qualification strategy
-- [Case catalogue](docs/case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)
-- [Roadmap](docs/roadmap.md) — 3-week plan: coupled CFD→tritium permeation, MHD duct, ribbed channel, HPC
+- [Case catalogue](docs/case_catalogue.md) — implemented evidence, qualification status and explicit boundaries
+- [Roadmap](docs/roadmap.md) — planned work only; not yet implemented or qualified
 - [Literature review and scientific positioning](docs/literature_review.md) — where the field is, the gap, the story
 - [Aerospace needs review](docs/aerospace_review.md) — CFD Vision 2030, AIAA G-077 / ASME V&V 20 / NASA-STD-7009 / certification by analysis, turbine cooling, anti-ice, hydrogen aircraft — and the gap NuAgent fills
 - [Agent architecture review](docs/agent_architecture_review.md) — the widely cited agentic patterns (ReAct, Reflexion, AutoGen, MetaGPT, SWE-agent, Agentless, MAST, τ-bench…), why NuAgent is a workflow with a verifier and orchestrator–workers rather than a multi-agent chat

@@ -37,15 +37,17 @@ const principles = [
 const qualified = [
   "Typed simulation specs (Pydantic) as the only interface between the LLM and the solvers",
   "OpenFOAM backend: heated pipe (laminar, k-omega SST, k-epsilon family) and rib-roughened cooling tube, y+-targeted meshing",
-  "FESTIM 2.x backend: 1-D tritium permeation with McNabb-Foster traps, and thermal desorption spectroscopy",
+  "FESTIM 2.x backend: trap-free 1-D permeation path qualified against analytical steady flux and time lag",
   "Pre-flight review, closure ensemble, live convergence monitor, bounded diagnose-and-retry",
   "Grid-convergence index (Celik 2008 / ASME V&V 20) and validation against exact solutions and correlations",
-  "Executors: local, Docker, SLURM with an approval gate that discloses the whole job budget",
+  "Executors exercised in the current public evidence: local and Docker",
   "Markdown report with plots, decision log and provenance; qualification suite with negative controls",
   "LLM planning from natural language: Anthropic, OpenAI, or any OpenAI-compatible local server",
 ];
 
 const pending = [
+  "FESTIM trapped-permeation and TDS paths: implemented, but independent qualification is incomplete.",
+  "SLURM executor: implemented with an approval gate; qualification on a real cluster is pending.",
   "Bayesian calibration (emcee): convergence diagnostics pending. No thinning or effective sample size, and the shipped TDS example is not converged.",
   "Sobol sensitivity (SALib): failed-sample handling pending. Failed model evaluations are imputed with the sample mean and not reported, which biases the indices.",
 ];
@@ -69,11 +71,10 @@ const PageAbout = () => {
         <div className="max-w-6xl flex flex-col-reverse md:flex-row py-4">
           <div className="text-stone-800 mt-4 text-base md:text-2xl font-lato font-medium p-4 mb-2">
             <span className="text-brand-700 font-semibold text-xl md:text-3xl font-lato">NuAgent</span>{" "}
-            is an open-source (MIT) research code by Baihua Ren. It is an agentic workflow that sets up,
-            runs, monitors, verifies, validates and calibrates convective heat-transfer and transport
-            simulations, and writes the V&amp;V report. The cases it handles today are turbine-blade
-            cooling passages, heat-exchanger and reactor coolant channels (OpenFOAM), and tritium
-            transport in fusion materials (FESTIM).
+            is an open-source (MIT) research demonstrator by Baihua Ren. Its current public evidence is
+            deliberately narrow: OpenFOAM internal-flow CFD — heated pipes and a rib-roughened cooling
+            tube — plus one qualified trap-free FESTIM permeation path as a second-backend transfer test.
+            Planned multiphysics extensions are kept separate in the roadmap.
             <div className="mt-4 text-base md:text-2xl">
               The architecture follows what the agent literature actually supports: a deterministic
               workflow backbone with typed contracts, an independent verifier that reviews every plan
@@ -117,7 +118,7 @@ const PageAbout = () => {
 
       <div className="max-w-6xl mx-auto px-4 py-10 grid grid-cols-1 md:grid-cols-2 gap-8 font-lato">
         <div>
-          <h3 className="font-serif_title text-2xl text-brand-700 mb-4">Implemented and qualified</h3>
+          <h3 className="font-serif_title text-2xl text-brand-700 mb-4">Implemented (qualification status noted per item)</h3>
           <ul className="space-y-2 text-sm md:text-base text-stone-700">
             {qualified.map((item) => (
               <li key={item} className="flex gap-3">

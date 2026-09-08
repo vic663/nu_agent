@@ -16,7 +16,7 @@ const stats = [
 
 const builtOn = [
   { name: "OpenFOAM", icon: "fa-solid fa-water", note: "RANS heat transfer" },
-  { name: "FESTIM", icon: "fa-solid fa-atom", note: "tritium transport" },
+  { name: "FESTIM", icon: "fa-solid fa-atom", note: "permeation benchmark" },
   { name: "LangGraph", icon: "fa-solid fa-diagram-project", note: "workflow graph" },
   { name: "Pydantic", icon: "fa-solid fa-shield-halved", note: "typed contracts" },
   { name: "emcee", icon: "fa-solid fa-dice", note: "Bayesian calibration" },
@@ -40,8 +40,8 @@ const HomePage = () => {
       photo: workflowImg,
       title: "What NuAgent does",
       paragraphs: [
-        "NuAgent sets up, runs, monitors, verifies, validates and calibrates convective heat-transfer and transport simulations: turbine-blade cooling passages, heat-exchanger and reactor coolant channels in OpenFOAM, and tritium transport in fusion materials with FESTIM. Then it writes the V&V report.",
-        "The Nu is the Nusselt number, the quantity every case here is validated on. The physics is the same in an aircraft engine and in a reactor core.",
+        "NuAgent runs and audits internal-flow CFD cases in OpenFOAM — heated pipes and a rib-roughened cooling tube — and writes the V&V report. The same architecture is exercised through a FESTIM permeation benchmark as a second-backend transfer test.",
+        "The public evidence is deliberately narrow: real solver runs, analytical or correlation checks, negative controls and reports that preserve rejected outcomes.",
       ],
     },
     {
@@ -79,9 +79,8 @@ const HomePage = () => {
               <span className="text-stone-800">simulations driven by an agent you can qualify.</span>
             </div>
             <p className="mt-4 text-base md:text-lg font-lato font-normal text-brand-100">
-              An open-source agentic V&amp;V workflow for convective heat transfer (OpenFOAM) and
-              tritium transport (FESTIM). Every number it reports carries a grid-convergence index
-              and a reference band.
+              A small, verification-gated agentic CFD demonstrator built around OpenFOAM, with one
+              qualified trap-free FESTIM permeation path exercising the same workflow architecture.
             </p>
             <div className="flex flex-col sm:flex-row gap-3 justify-center mt-4">
               <button

@@ -121,7 +121,7 @@ const CapabilityData = [
     tag: "backend",
     title: "FESTIM 2.x",
     description:
-      "1-D tritium permeation with McNabb-Foster traps and thermal desorption spectroscopy, generated and post-processed by NuAgent and solved in the FESTIM (dolfinx) container.",
+      "The trap-free 1-D permeation path is qualified against analytical steady flux and time lag. Trapped-permeation and TDS paths are implemented, but their independent qualification is incomplete.",
     icon: "fa-solid fa-atom",
   },
   {
@@ -139,7 +139,7 @@ const CapabilityData = [
     tag: "executor",
     title: "Local, Docker and SLURM",
     description:
-      "Local (with the live monitor), Docker (opencfd/openfoam-default, dolfinx/dolfinx) and SLURM (sbatch, squeue, sacct). The SLURM approval gate discloses the whole job budget, solve attempts plus grid levels plus ensemble members, and covers every child submission.",
+      "Local and Docker execution are exercised in the current public evidence. A SLURM executor with sbatch, squeue and sacct plus a whole-job-budget approval gate is implemented; qualification on a real cluster is still pending.",
     icon: "fa-solid fa-server",
   },
   {

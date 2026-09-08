@@ -1,11 +1,10 @@
 # Case catalogue
 
-The physics NuAgent orchestrates is *internal-flow convective heat transfer* and *hydrogen-isotope
-transport in solids*. Both are shared by very different applications — reactor coolant channels, fusion
-blankets and divertors, gas-turbine cooling passages, aircraft anti-ice systems — and both have benchmark
-problems with known answers, which is what makes an agent qualifiable.
+This catalogue separates **public evidence** from future work. Implemented cases are listed below with
+their current qualification status. Planned extensions are summarized separately and are not evidence of
+implemented or qualified capability.
 
-Legend: ✅ implemented · 🔧 designed, in roadmap · 💡 candidate
+Legend: ✅ qualified or validated evidence · ⚠ implemented, qualification incomplete
 
 ## A. Benchmark cases (known answers → agent qualification)
 
@@ -14,36 +13,30 @@ Legend: ✅ implemented · 🔧 designed, in roadmap · 💡 candidate
 | A1 | **Laminar heated pipe** (axisymmetric, uniform q″) | OpenFOAM `buoyantSimpleFoam`, laminar | exact: Nu = 48/11, f = 64/Re; thermal entry length | ✅ Nu +0.3 %, f +0.1 % |
 | A2 | **Turbulent heated pipe** (water, Re 1e4–1e5) | OpenFOAM k-ω SST (wall-resolved or wall functions) | Gnielinski ±10 %, Petukhov, Dittus–Boelter ±25 %, Blasius/Prandtl–Kármán | ✅ Nu −9.6 % vs Gnielinski (−3.0 % vs D-B), f −7.6 % |
 | A2-MF | **Turbulent heated pipe, closure ensemble** (`model_form`: SST, k-ε and realizable k-ε with Jayatilleke wall functions, Launder–Sharma) | same case, four closures, wall treatment per closure | as A2 | ✅ Nu 124.6 / 132.3 / 130.0 / 174.2 → model-form ±19.9 % vs GCI < 0.1 %; f ±13.9 % vs GCI 0.9 %; Launder–Sharma is the outlier here (it was the best closure for D1) — see `docs/examples/turbulent_pipe/report.md` §6 |
-| A3 | **Tritium permeation, plane sheet** | FESTIM 2.x, transient diffusion | Crank series solution: J_ss = Dc₀/L, t_lag = L²/6D | ✅ generated/post-processed; solver in container |
-| A4 | **Permeation with one McNabb–Foster trap** | FESTIM | Oriani effective diffusivity (dilute limit) | ✅ |
-| A5 | **Thermal desorption spectrum, one trap** | FESTIM (implant → rest → ramp) + first-order reduced model | Redhead/Kissinger peak-temperature relation | ✅ reduced model; FESTIM runner written |
-| A6 | **Hartmann/Shercliff MHD duct flow** | OpenFOAM `mhdFoam` (laminar incompressible MHD) | exact Hartmann profile u(y; Ha); pressure gradient | 🔧 analytical solution implemented (`physics/analytical.hartmann_velocity`); template = OpenFOAM `hartmann` tutorial |
+| A3 | **Tritium permeation, plane sheet** | FESTIM 2.x, transient diffusion | Crank series solution: J_ss = Dc₀/L, t_lag = L²/6D | ✅ trap-free permeation path qualified against analytical steady flux and time lag |
+| A4 | **Permeation with one McNabb–Foster trap** | FESTIM | Oriani effective diffusivity (dilute limit) | ⚠ implemented; independent qualification incomplete |
+| A5 | **Thermal desorption spectrum, one trap** | FESTIM (implant → rest → ramp) + first-order reduced model | Redhead/Kissinger peak-temperature relation | ⚠ reduced model implemented; FESTIM/TDS qualification incomplete |
 
-## B. Application cases — fission
+## B. Implemented application case
 
-| # | Case | Why it matters | Reference data | Design sketch | Status |
-|---|---|---|---|---|---|
-| B1 | **Conjugate heat transfer in a heated tube** (solid wall + coolant) | fuel-pin/cladding-to-coolant path; ORNL group does CHT routinely | analytical 1-D conduction + A2 correlations | `chtMultiRegionSimpleFoam`, wedge with a solid annulus region; QoIs: wall/interface temperature, Nu | 🔧 week 2 |
-| B2 | **Bare rod-bundle subchannel** (square lattice, P/D 1.2–1.3) | the canonical LWR/SFR coolant geometry | Trupp & Azad (1975), Hooper & Rehme (1984); Rehme friction correlation | periodic subchannel (¼ symmetry) with `snappyHexMesh` or multi-block `blockMesh`; QoIs: f, Nu, secondary-flow strength | 🔧 week 3 |
-| B3 | **Natural-circulation loop** | passive safety systems (SMRs) | loop analytical solution (Vijayan) | 1-D/2-D loop with `buoyantSimpleFoam`, gravity on | 💡 |
+| # | Case | Evidence | Status |
+|---|---|---|---|
+| D1 | **Rib-roughened cooling tube** (e/D = 0.04, p/e = 10, air, Re = 2×10⁴) | Real OpenFOAM runs; Webb correlation; closure comparison; reattachment diagnostic | ✅ implemented and validated; detailed results below |
 
-## C. Application cases — fusion
+## C. Planned work — not implemented or qualified
 
-| # | Case | Why it matters | Reference | Design sketch | Status |
-|---|---|---|---|---|---|
-| C1 | **Coupled coolant channel → tritium permeation through the channel wall** | tritium inventory and permeation into coolant loops is a licensing-level question for blankets | one-way coupling; verify against A2 + A3 in the limits | OpenFOAM computes the wall-temperature profile T_w(x) (A2); FESTIM solves permeation through the pipe wall with T(x) as a spatially varying temperature (`temperature=lambda x: …`) and Sieverts BCs; QoIs: permeation flux distribution, total inventory. **Multiphysics code integration.** | 🔧 week 2 — priority |
-| C2 | **Liquid-metal MHD duct** (PbLi, Ha 10²–10³) | blanket pressure drop and heat transfer are MHD-dominated | Shercliff/Hunt exact solutions; A6 | `mhdFoam` (laminar) → later VertexCFD/quasi-2-D models; QoIs: pressure gradient, velocity profile, Hartmann-layer thickness | 🔧 week 2 |
-| C3 | **Divertor monoblock (W/Cu/CuCrZr) heat + tritium** | FESTIM's flagship application | FESTIM monoblock example; Delaporte-Mathurin et al. | 2-D axisymmetric monoblock, coupled `HeatTransferProblem` + `HydrogenTransportProblem` | 🔧 week 3 |
-| C4 | **TDS calibration against real spectra** | trap parameters are the key uncertainty of inventory predictions | published W TDS data | reduced-model calibration → GP surrogate of FESTIM TDS → posterior comparison | 🔧 week 2 |
+The following are future extensions only. They are tracked in [`roadmap.md`](roadmap.md), not counted
+as current NuAgent capability:
 
-## D. Application cases — aerospace (transferable heat transfer, PI's background)
+- conjugate heat transfer;
+- rod-bundle/subchannel CFD;
+- one-way OpenFOAM -> FESTIM coolant/permeation coupling;
+- Hartmann/Shercliff MHD;
+- FESTIM-in-the-loop TDS calibration against real spectra;
+- impinging-jet heat transfer;
+- divertor-monoblock heat and hydrogen-isotope transport.
 
-| # | Case | Why it matters | Reference | Status |
-|---|---|---|---|---|
-| D1 | **Rib-roughened cooling tube** (transverse square ribs, e/D = 0.04, p/e = 10, air, Re = 2×10⁴) | turbine-blade internal cooling and enhanced heat-exchanger tubes; the *same* rib turbulators are used on UK AGR fuel cladding | Webb, Eckert & Goldstein (1971) roughness functions R(e⁺), G(e⁺); Han (1988) for channels; Rau et al. (1998) | ✅ implemented, validated — see below |
-| D2 | **Impinging jet (anti-ice piccolo tube)** | wing anti-ice; the PI validated this at Bombardier against NASA data | Martin (1977), Goldstein & Behbahani (1982); ERCOFTAC/NASA impinging-jet data | 🔧 week 3 — axisymmetric jet onto a heated plate (H/D 2–8); QoIs: stagnation Nu, radial Nu(r) |
-
-### D1 results — turbulence-model comparison (real OpenFOAM runs, 6-rib development case, 13.5k cells)
+## D. Detailed evidence — rib-roughened cooling tube
 
 The ribbed tube is where the workflow earns its keep: the *default* closure fails validation and the
 diagnostics say why.
