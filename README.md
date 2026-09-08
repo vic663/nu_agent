@@ -8,7 +8,7 @@
 NuAgent is built around one idea: **an AI agent that drives simulation codes must itself be qualifiable.**
 So every decision the agent makes is bounded by typed schemas, every solver input is generated from
 validated templates, every result is verified (grid-convergence index, exact solutions) and validated
-(correlations, experiments) before it is reported — and the whole loop runs *without* an LLM in CI, so the
+(correlations, experiments) before it is accepted as credible — failed and rejected cases are reported too — and the whole loop runs *without* an LLM in CI, so the
 LLM's contribution can be measured rather than assumed.
 
 ```
@@ -105,8 +105,7 @@ and from τ_w agree within 2 % for every member.)
 **The ribbed tube is where the workflow earns its keep.** With the default k-ω SST closure the run
 converges cleanly but predicts a single recirculation filling the whole inter-rib gap (d-type cavity flow),
 giving f 55 % and Nu 65 % below Webb's correlation; the physics-aware critique flags "no reattachment
-between ribs" and recommends the k-ε family, which reattaches at 4–5 e as experiments do and brings f
-within 4 % — leaving the well-documented RANS heat-transfer deficit in separated regions (see
+between ribs" and recommends the k-ε family. Across the tested cases, k–ε-family closures restore reattachment at x/e ≈ 3–5; the final twelve-rib Launder–Sharma run gives x/e = 3.3, and the best case brings f within 4 % — leaving the well-documented RANS heat-transfer deficit in separated regions (see
 [`docs/case_catalogue.md`](docs/case_catalogue.md) §D1 for the five-model comparison). An
 execution-success metric would have reported the SST run as a success.
 
