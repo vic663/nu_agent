@@ -36,7 +36,7 @@ between role-playing agents.
 | Continue-from-latest-time for stalled runs, idempotent case reuse | ✅ reuse identity includes the template code and the NuAgent version, and refuses a case whose previous run did not converge |
 | **Pre-flight review** node: correlation validity at the operating point, y⁺ vs wall treatment, entry length, closure lessons, FESTIM time scales — blocking findings stop the run before build | ✅ rules; LLM may add findings, never remove |
 | **Closure ensemble** (`model_form`): re-runs the base grid with alternative RANS closures (optionally in parallel) and reports model-form uncertainty next to the GCI, with per-closure reattachment diagnostics | ✅ |
-| FESTIM 2.x backend: 1-D tritium permeation (with McNabb–Foster traps) and TDS | ✅ generated & post-processed; solver run in the FESTIM container |
+| FESTIM 2.x backend | ✅ trap-free 1-D permeation path qualified against analytical steady flux and time lag; ⚠ trapped-permeation/TDS implemented, independent qualification incomplete |
 | Mock backend with controlled discretisation error for CI and agent evals | ✅ |
 | Live convergence monitor (stops OpenFOAM early once *physically meaningful* residuals converge) | ✅ the residual criterion is the live stop signal; the *verdict* additionally requires a clean termination and a zero exit status |
 | Diagnose-and-retry loop with whitelisted, bounded numerics changes | ✅ rules policy; LLM policy with rule fallback |
@@ -45,7 +45,7 @@ between role-playing agents.
 | Bayesian calibration (emcee) with reduced-order models and GP surrogates | ⚠ implemented; **convergence diagnostics pending** — `get_autocorr_time(tol=0)` disables emcee's own guard, there is no thinning or ESS, and the shipped TDS example is not converged |
 | Sobol sensitivity analysis (SALib) | ⚠ implemented; **failed-sample handling pending** — failed model evaluations are imputed with the sample mean and not reported, which biases the indices |
 | Markdown report with plots, decision log and provenance (git hash, versions, digests) | ✅ |
-| Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ the gate discloses the whole job budget (solve attempts + grid levels + ensemble members) and covers every child submission, not only the first |
+| Executors: local, Docker, SLURM (sbatch/squeue/sacct, approval gate) | ✅ local/Docker exercised in public evidence; ⚠ SLURM implemented with whole-job-budget approval gate, real-cluster qualification pending |
 | Agent qualification suite (`nuagent eval`, `--repeats` for τ-bench **pass^k** reliability) | ✅ 10 tasks — 7 that must succeed and **3 negative controls that must be refused**; the agent behaves correctly on 10/10 (rules policy, mock backend). See the note below for what this does and does not measure |
 | LLM planning from natural language (`nuagent ask`) — Anthropic, OpenAI, or any OpenAI-compatible local server | ✅ |
 
