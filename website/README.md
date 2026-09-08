@@ -1,6 +1,6 @@
 # NuAgent website
 
-Public site for [NuAgent](https://github.com/vic663/nuagent), the agentic V&V workflow for convective
+Public site for [NuAgent](https://github.com/vic663/nu_agent), the agentic V&V workflow for convective
 heat-transfer (OpenFOAM) and tritium-transport (FESTIM) simulations.
 
 Built with **React 19 + Vite 6**, styled with **Tailwind CSS 3**, routed with **React Router 7**. The
@@ -17,8 +17,8 @@ npm run build      # production bundle in dist/
 npm run preview    # serve the production bundle locally
 npm run lint
 
-npm run build:pages    # the same bundle with the GitHub Pages base path /nuagent/
-npm run preview:pages  # serve that build at http://localhost:4173/nuagent/
+npm run build:pages    # the same bundle with the GitHub Pages base path /nu_agent/
+npm run preview:pages  # serve that build at http://localhost:4173/nu_agent/
 ```
 
 Node.js 20 or newer is required (React Router 7 sets that floor; the deploy workflow uses 22).
@@ -51,12 +51,12 @@ Node.js 20 or newer is required (React Router 7 sets that floor; the deploy work
 
 **GitHub Pages (the live site).** `.github/workflows/pages.yml` at the repository root runs on every push
 to `main` that touches `website/`: it installs, lints, builds with `npm run build:pages` (which sets the
-Vite base path to `/nuagent/`), copies `index.html` to `404.html` so deep links survive Pages' lack of an
-SPA rewrite, and publishes `dist/` to https://vic663.github.io/nuagent/. One-time setup, best done
+Vite base path to `/nu_agent/`), copies `index.html` to `404.html` so deep links survive Pages' lack of an
+SPA rewrite, and publishes `dist/` to https://vic663.github.io/nu_agent/. One-time setup, best done
 **before** the first push that contains `website/`: Settings, Pages, Build and deployment, Source:
 **GitHub Actions**. If the workflow ran before Pages was enabled, its deploy job fails; enable Pages, then
 re-run the workflow from the Actions tab (it has a manual "Run workflow" trigger). The router reads the base
-path from `import.meta.env.BASE_URL`, so the same code runs at `/` locally and at `/nuagent/` on Pages.
+path from `import.meta.env.BASE_URL`, so the same code runs at `/` locally and at `/nu_agent/` on Pages.
 
 **Anywhere else.** `npm run build` produces a root-based `dist/`. `vercel.json` rewrites every path to `/`
 so client-side routing works on Vercel; on any other static host configure a single-page-app fallback to

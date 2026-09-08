@@ -52,8 +52,8 @@ all = ["nuagent[anthropic,openai,ollama,mcp,dev]"]
 nuagent = "nuagent.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/vic663/nuagent"
-Documentation = "https://github.com/vic663/nuagent/tree/main/docs"
+Homepage = "https://github.com/vic663/nu_agent"
+Documentation = "https://github.com/vic663/nu_agent/tree/main/docs"
 
 [tool.setuptools.packages.find]
 where = ["src"]

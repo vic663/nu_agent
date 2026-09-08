@@ -1,7 +1,7 @@
 import CodeBlock from "./PageGetStarted/CodeBlock";
 import { REPO_URL } from "./NavBar";
 
-const install = `git clone https://github.com/vic663/nuagent && cd nuagent
+const install = `git clone https://github.com/vic663/nu_agent && cd nu_agent
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"            # add ,anthropic or ,openai for LLM planning
 

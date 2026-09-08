@@ -6,7 +6,7 @@ reactor coolant channels (OpenFOAM), tritium transport in fusion materials (FEST
 V&V report.** The *Nu* is the Nusselt number, the quantity every case here is validated on (and ν, the
 kinematic viscosity); the physics is the same in an aircraft engine and in a reactor core.
 
-[![CI](https://github.com/vic663/nuagent/actions/workflows/ci.yml/badge.svg)](https://github.com/vic663/nuagent/actions)
+[![CI](https://github.com/vic663/nu_agent/actions/workflows/ci.yml/badge.svg)](https://github.com/vic663/nu_agent/actions)
 ![python](https://img.shields.io/badge/python-3.10%2B-blue) ![license](https://img.shields.io/badge/license-MIT-green)
 
 NuAgent is built around one idea: **an AI agent that drives simulation codes must itself be qualifiable.**
@@ -119,7 +119,7 @@ execution-success metric would have reported the SST run as a success.
 (Step-by-step version with Windows/WSL2/Docker instructions: [`docs/tutorial.md`](docs/tutorial.md).)
 
 ```bash
-git clone https://github.com/vic663/nuagent && cd nuagent
+git clone https://github.com/vic663/nu_agent && cd nu_agent
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"            # add ,anthropic or ,openai for LLM planning
 
@@ -234,7 +234,7 @@ docker/, .github/      containers and CI (unit + OpenFOAM + FESTIM jobs)
 
 ## Documentation
 
-- [Project website](https://vic663.github.io/nuagent/) — overview, capabilities, results and quick start (source in [`website/`](website/))
+- [Project website](https://vic663.github.io/nu_agent/) — overview, capabilities, results and quick start (source in [`website/`](website/))
 - [Hands-on guide](docs/tutorial.md) — install, first run, how to read a report, writing your own spec, OpenFOAM / FESTIM / LLM / SLURM set-up, qualification, troubleshooting
 - [Design and architecture](docs/design.md) — state machine, guardrails, qualification strategy
 - [Case catalogue](docs/case_catalogue.md) — benchmark and application cases (fission, fusion, aerospace)

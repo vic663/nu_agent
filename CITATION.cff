@@ -9,5 +9,5 @@ version: 0.1.4
 # date-released: add the actual tag date here when v0.1.4 is tagged. It is deliberately
 # absent while the version is unreleased rather than carrying a date that has not happened.
 license: MIT
-repository-code: "https://github.com/vic663/nuagent"
+repository-code: "https://github.com/vic663/nu_agent"
 keywords: [agentic workflow, CFD, OpenFOAM, FESTIM, tritium, verification and validation, uncertainty quantification, Bayesian calibration, LangGraph]

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import logo from "./assets/logo.svg";
 
-export const REPO_URL = "https://github.com/vic663/nuagent";
+export const REPO_URL = "https://github.com/vic663/nu_agent";
 
 const links = [
   { to: "/", label: "Home" },

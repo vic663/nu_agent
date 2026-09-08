@@ -9,7 +9,7 @@ import PageResults from "./PageResults";
 import PageGetStarted from "./PageGetStarted";
 import PageContact from "./PageContact";
 
-// Vite's BASE_URL is "/" for local dev and Vercel, and "/nuagent/" for the GitHub Pages build
+// Vite's BASE_URL is "/" for local dev and Vercel, and "/nu_agent/" for the GitHub Pages build
 // (`npm run build:pages`). React Router wants it without the trailing slash.
 const basename = import.meta.env.BASE_URL.replace(/\/$/, "");
 

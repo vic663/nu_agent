@@ -11,7 +11,7 @@ const bibtex = `@software{ren2026nuagent,
              convective heat-transfer and transport simulations},
   version = {0.1.4},
   year    = {2026},
-  url     = {https://github.com/vic663/nuagent},
+  url     = {https://github.com/vic663/nu_agent},
   license = {MIT}
 }`;
 
@@ -40,7 +40,7 @@ const PageContact = () => {
               rel="noopener noreferrer"
               className="block hover:text-brand-500"
             >
-              <i className="fa-brands fa-github w-7"></i>github.com/vic663/nuagent
+              <i className="fa-brands fa-github w-7"></i>github.com/vic663/nu_agent
             </a>
             <a
               href={`${REPO_URL}/issues`}
