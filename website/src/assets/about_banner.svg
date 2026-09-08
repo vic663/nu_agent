@@ -32,5 +32,5 @@
     <path d="M0 320 C 400 300, 800 340, 1200 320 S 1700 300, 1920 325"/>
     <path d="M0 400 C 400 385, 800 415, 1200 400 S 1700 385, 1920 405"/>
   </g>
-  <text x="1880" y="520" font-family="Lato, Arial, sans-serif" font-size="22" text-anchor="end" fill="#e0f2fe" fill-opacity="0.8">e/D = 0.04, p/e = 10, reattachment at 4 to 5 e</text>
+  <text x="1880" y="520" font-family="Lato, Arial, sans-serif" font-size="22" text-anchor="end" fill="#e0f2fe" fill-opacity="0.8">e/D = 0.04, p/e = 10; tested reattachment x/e ≈ 3–5</text>
 </svg>

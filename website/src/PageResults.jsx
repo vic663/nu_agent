@@ -37,9 +37,10 @@ const PageResults = () => {
         <p>
           With the default k-omega SST closure the ribbed-tube run converges cleanly but predicts a single
           recirculation filling the whole inter-rib gap, giving f 55 % and Nu 65 % below the Webb correlation.
-          The physics-aware critique flags no reattachment between ribs and recommends the k-epsilon family,
-          which reattaches at 4 to 5 rib heights as experiments do and brings f within 4 %. An execution-success
-          metric would have reported the SST run as a success.
+          The physics-aware critique flags no reattachment between ribs and recommends the k-epsilon family.
+          Across the tested cases, k–ε-family closures restore reattachment at x/e ≈ 3–5; the final twelve-rib
+          Launder–Sharma run gives x/e = 3.3, and the best case brings f within 4 %. An execution-success metric
+          would have reported the SST run as a success.
         </p>
         <p>
           The closure ensemble puts a number on the model-form uncertainty that a single run hides. For the
