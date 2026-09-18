@@ -3,10 +3,7 @@
 Public site for [NuAgent](https://github.com/vic663/nu_agent), the agentic V&V workflow for convective
 heat-transfer (OpenFOAM) and tritium-transport (FESTIM) simulations.
 
-Built with **React 19 + Vite 6**, styled with **Tailwind CSS 3**, routed with **React Router 7**. The
-project layout and page structure follow the
-[MHEF website](https://github.com/Ericalyhan94/MHEF_website): a top `NavBar`, a set of page components,
-and a `NavBar2` footer.
+Built with **React 19 + Vite 6**, styled with **Tailwind CSS 3**, routed with **React Router 7**.
 
 ## Run it
 
